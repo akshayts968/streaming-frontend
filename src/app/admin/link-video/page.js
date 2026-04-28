@@ -12,7 +12,8 @@ export default function LinkVideoPage() {
     category: 'Action',
     drive_file_id: '',
     thumbnailUrl: '',
-    duration: ''
+    duration: '',
+    useIframe: false
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -25,7 +26,8 @@ export default function LinkVideoPage() {
   }, [router]);
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    setFormData({ ...formData, [e.target.name]: value });
   };
 
   const handleSubmit = async (e) => {
@@ -53,7 +55,8 @@ export default function LinkVideoPage() {
           category: 'Action',
           drive_file_id: '',
           thumbnailUrl: '',
-          duration: ''
+          duration: '',
+          useIframe: false
         });
       } else {
         setMessage(`Error: ${data.message}`);
@@ -151,6 +154,18 @@ export default function LinkVideoPage() {
               onChange={handleChange} 
               placeholder="e.g., 120:30"
             />
+          </div>
+
+          <div className="form-group">
+            <label className="admin-checkbox-label">
+              <input 
+                type="checkbox" 
+                name="useIframe" 
+                checked={formData.useIframe} 
+                onChange={handleChange} 
+              />
+              Use Drive Player (Fixes Audio issues)
+            </label>
           </div>
 
           <button type="submit" className="btn-submit" disabled={loading}>
