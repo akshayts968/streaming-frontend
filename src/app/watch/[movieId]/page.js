@@ -14,7 +14,7 @@ export default function WatchPage({ params: paramsPromise }) {
     // Fetch movie metadata from our DB
     const fetchMovieDetails = async () => {
       try {
-        const res = await fetch(`http://localhost:5001/api/videos/${movieId}`);
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos/${movieId}`);
         const data = await res.json();
         if (data.success) {
           setMovieData(data.data);

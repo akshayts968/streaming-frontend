@@ -11,7 +11,7 @@ export default function WatchlistPage() {
     const fetchWatchlist = async () => {
       try {
         // Note: In a real app, this would use a token from auth context
-        const res = await fetch('http://localhost:5001/api/user/watchlist');
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/watchlist`);
         const data = await res.json();
         if (data.success) {
           setList(data.data);

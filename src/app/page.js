@@ -145,8 +145,8 @@ export default function Home() {
     const fetchVideos = async () => {
       try {
         const [res, heroRes] = await Promise.all([
-          fetch('http://localhost:5001/api/videos'),
-          fetch('http://localhost:5001/api/videos?isHero=true')
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos`),
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos?isHero=true`)
         ]);
         
         const data = await res.json();

@@ -15,7 +15,7 @@ export default function BrowsePage() {
   useEffect(() => {
     const fetchVideos = async () => {
       try {
-        const res = await fetch('http://localhost:5001/api/videos');
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos`);
         const data = await res.json();
         if (data.success) {
           setVideos(data.data);

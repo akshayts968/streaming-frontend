@@ -26,7 +26,7 @@ export default function AdminPage() {
 
   const fetchVideos = async (userId) => {
     try {
-      const res = await fetch('http://localhost:5001/api/videos');
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos`);
       const data = await res.json();
       if (data.success) {
         setVideos(data.data);
@@ -42,7 +42,7 @@ export default function AdminPage() {
   const toggleHero = async (videoId, currentStatus) => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:5001/api/videos/${videoId}/hero`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos/${videoId}/hero`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -69,7 +69,7 @@ export default function AdminPage() {
     
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:5001/api/videos/${videoId}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos/${videoId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -107,7 +107,7 @@ export default function AdminPage() {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:5001/api/videos/${videoId}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos/${videoId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

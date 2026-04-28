@@ -105,7 +105,7 @@ export default function UploadPage() {
           const token = localStorage.getItem('token');
           await new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
-            xhr.open('POST', 'http://localhost:5001/api/videos/upload-chunk', true);
+            xhr.open('POST', `${process.env.NEXT_PUBLIC_API_URL}/api/videos/upload-chunk`, true);
             xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
             xhr.upload.onprogress = (e) => {
@@ -173,8 +173,8 @@ export default function UploadPage() {
       formData.append('tags', metadata.tags);
 
       const endpoint = metadata.storageProvider === 'cloudinary' 
-        ? 'http://localhost:5001/api/videos/upload-cloudinary' 
-        : 'http://localhost:5001/api/videos/upload';
+        ? `${process.env.NEXT_PUBLIC_API_URL}/api/videos/upload-cloudinary` 
+        : `${process.env.NEXT_PUBLIC_API_URL}/api/videos/upload`;
 
       try {
         const token = localStorage.getItem('token');

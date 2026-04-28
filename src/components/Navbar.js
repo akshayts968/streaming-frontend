@@ -28,7 +28,7 @@ export default function Navbar() {
     const delayDebounceFn = setTimeout(async () => {
       if (searchQuery.length > 2) {
         try {
-          const res = await fetch(`http://localhost:5001/api/videos/search?q=${searchQuery}`);
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos/search?q=${searchQuery}`);
           const data = await res.json();
           if (data.success) setSearchResults(data.data);
         } catch (err) { console.error('Search failed:', err); }

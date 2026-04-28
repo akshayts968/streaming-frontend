@@ -37,7 +37,7 @@ export default function LinkVideoPage() {
 
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:5001/api/videos/link-drive', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos/link-drive`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
