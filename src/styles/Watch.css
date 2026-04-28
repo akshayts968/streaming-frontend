@@ -1,0 +1,123 @@
+.watch-page {
+  max-width: 1400px;
+  margin: 2rem auto;
+  padding: 0 4rem;
+}
+
+.player-section {
+  width: 100%;
+  background: #000;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+  margin-bottom: 2rem;
+}
+
+.details-section {
+  padding: 2.5rem;
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.movie-title {
+  font-size: 2.5rem;
+  font-weight: 800;
+}
+
+.btn-watchlist {
+  padding: 0.7rem 1.5rem;
+  border-radius: 50px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: var(--transition);
+}
+
+.btn-watchlist .plus {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.btn-watchlist:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  transform: scale(1.05);
+}
+
+.meta-info {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.category-tag {
+  background: var(--primary);
+  color: white;
+  padding: 0.1rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.description {
+  font-size: 1.1rem;
+  line-height: 1.7;
+  color: #d1d1d6;
+  margin-bottom: 3rem;
+  max-width: 900px;
+}
+
+.creator-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border);
+}
+
+.avatar {
+  width: 45px;
+  height: 45px;
+  background: var(--primary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: white;
+}
+
+.creator-name {
+  color: var(--text-muted);
+}
+
+.creator-name span {
+  color: white;
+  font-weight: 600;
+}
+
+.watch-loading, .watch-error {
+  height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 4rem;
+  font-size: 1.5rem;
+  border-radius: var(--radius-lg);
+}
+
+@media (max-width: 768px) {
+  .watch-page { padding: 0 1rem; }
+  .movie-title { font-size: 1.8rem; }
+}
