@@ -94,7 +94,8 @@ export default function AdminPage() {
       description: video.description || '',
       category: video.category,
       thumbnailUrl: video.thumbnailUrl,
-      duration: video.duration || ''
+      duration: video.duration || '',
+      useIframe: video.useIframe || false
     });
   };
 
@@ -202,6 +203,15 @@ export default function AdminPage() {
                   onChange={handleEditChange} 
                   placeholder="Duration (MM:SS)" 
                 />
+                <label className="admin-checkbox-label">
+                  <input 
+                    type="checkbox" 
+                    name="useIframe" 
+                    checked={editFormData.useIframe} 
+                    onChange={(e) => setEditFormData({ ...editFormData, useIframe: e.target.checked })} 
+                  />
+                  Use Drive Player (Fixes Audio issues)
+                </label>
                 <div className="inline-edit-actions">
                   <button type="submit" className="btn-save">Save</button>
                   <button type="button" className="btn-cancel" onClick={() => setEditingVideo(null)}>Cancel</button>

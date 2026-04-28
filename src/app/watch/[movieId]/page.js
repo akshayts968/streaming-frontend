@@ -39,6 +39,7 @@ export default function WatchPage({ params: paramsPromise }) {
           driveFileId={movieData.drive_file_id} 
           src={movieData.videoUrl} 
           poster={movieData.thumbnailUrl} 
+          useIframe={movieData.useIframe}
         />
       </div>
       

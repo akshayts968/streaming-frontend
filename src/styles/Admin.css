@@ -325,3 +325,19 @@
   color: white;
   border-color: white;
 }
+
+.admin-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #ccc;
+  cursor: pointer;
+  padding: 0.5rem 0;
+  user-select: none;
+}
+
+.admin-checkbox-label input {
+  width: auto !important;
+  cursor: pointer;
+}

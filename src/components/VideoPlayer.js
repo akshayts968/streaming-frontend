@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import '@/styles/VideoPlayer.css';
 
-export default function VideoPlayer({ driveFileId, src, poster }) {
+export default function VideoPlayer({ driveFileId, src, poster, useIframe = false }) {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -233,19 +233,18 @@ export default function VideoPlayer({ driveFileId, src, poster }) {
     return `${padM}:${padS}`;
   };
 
-  if (!videoSrc && !driveFileId) return <div className="video-placeholder glass">No video source provided</div>;
-
-  // Option 2: If the video is hosted on Google Drive, use their iframe player 
-  // to guarantee audio codec support and automatic transcoding.
-  if (driveFileId) {
+  if (!videoSrc) return <div className="video-placeholder glass">No video source provided</div>;
+  
+  if (useIframe && driveFileId) {
     return (
-      <div className="video-container" style={{ aspectRatio: '16/9', overflow: 'hidden' }}>
-        <iframe 
-          src={`https://drive.google.com/file/d/${driveFileId}/preview`} 
-          width="100%" 
-          height="100%" 
+      <div className="video-container iframe-mode" style={{ aspectRatio: '16/9', background: '#000' }}>
+        <iframe
+          src={`https://drive.google.com/file/d/${driveFileId}/preview`}
+          width="100%"
+          height="100%"
           allow="autoplay; fullscreen"
-          style={{ border: 'none', width: '100%', height: '100%' }}
+          className="main-video"
+          style={{ border: 'none' }}
         ></iframe>
       </div>
     );
