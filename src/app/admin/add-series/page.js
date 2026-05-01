@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import '@/styles/Admin.css';
 
-export default function AddSeriesPage() {
+function AddSeriesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get('edit');
@@ -261,5 +261,13 @@ export default function AddSeriesPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function AddSeriesPage() {
+  return (
+    <Suspense fallback={<div className="admin-container"><div className="admin-header"><h1 className="admin-title">Loading...</h1></div></div>}>
+      <AddSeriesContent />
+    </Suspense>
   );
 }

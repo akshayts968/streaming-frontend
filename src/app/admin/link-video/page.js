@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Folder, FileVideo, ChevronLeft, Search, Loader2 } from 'lucide-react';
 import '@/styles/Admin.css';
 
-export default function LinkVideoPage() {
+function LinkVideoContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const seriesId = searchParams.get('seriesId');
@@ -470,5 +470,13 @@ export default function LinkVideoPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function LinkVideoPage() {
+  return (
+    <Suspense fallback={<div className="admin-container"><div className="admin-header"><h1 className="admin-title">Loading...</h1></div></div>}>
+      <LinkVideoContent />
+    </Suspense>
   );
 }
