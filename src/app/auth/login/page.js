@@ -42,6 +42,7 @@ export default function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-card glass">
+        <img src="/logo.jpg" alt="Logo" style={{ height: '60px', margin: '0 auto 1.5rem', display: 'block', borderRadius: '8px' }} />
         <h2>Welcome Back</h2>
         <p className="auth-subtitle">Log in to your Antigravity account</p>
         

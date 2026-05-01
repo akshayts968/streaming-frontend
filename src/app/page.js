@@ -107,6 +107,11 @@ export default function Home() {
   const [trendingVideos, setTrendingVideos] = useState([]);
   const [actionVideos, setActionVideos] = useState([]);
   const [dramaVideos, setDramaVideos] = useState([]);
+  const [thrillerVideos, setThrillerVideos] = useState([]);
+  const [comedyVideos, setComedyVideos] = useState([]);
+  const [documentaryVideos, setDocumentaryVideos] = useState([]);
+  const [regionalVideos, setRegionalVideos] = useState([]);
+  const [tvSeries, setTvSeries] = useState([]);
   const [activeSlide, setActiveSlide] = useState(0);
   const [heroSlides, setHeroSlides] = useState(HERO_SLIDES);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -144,13 +149,15 @@ export default function Home() {
   useEffect(() => {
     const fetchVideos = async () => {
       try {
-        const [res, heroRes] = await Promise.all([
+        const [res, heroRes, seriesRes] = await Promise.all([
           fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos`),
-          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos?isHero=true`)
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos?isHero=true`),
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/series`)
         ]);
         
         const data = await res.json();
         const heroData = await heroRes.json();
+        const seriesData = await seriesRes.json();
         
         if (heroData.success && heroData.data.length > 0) {
           const formattedHero = heroData.data.map((v, i) => ({
@@ -162,17 +169,38 @@ export default function Home() {
             description: v.description || 'Watch now on our streaming platform.',
             bgImage: v.thumbnailUrl,
             thumbImage: v.thumbnailUrl,
-            videoId: v._id
+            videoId: v._id,
+            slug: v.slug
           }));
           setHeroSlides(formattedHero);
         }
 
+        if (seriesData.success) {
+          // Map series to video-like objects for ContentRow
+          const formattedSeries = seriesData.data.map(s => ({
+            ...s,
+            isSeries: true,
+            views: 'New Series'
+          }));
+          setTvSeries(formattedSeries);
+        }
+
         if (data.success && data.data.length > 0) {
           setTrendingVideos(data.data.slice(0, 8));
-          setActionVideos(data.data.filter(v => v.category === 'Action'));
-          setDramaVideos(data.data.filter(v => v.category === 'Drama'));
+          
+          // Helper to filter by category (handles both single string and array)
+          const filterByCat = (videos, cat) => videos.filter(v => 
+            Array.isArray(v.category) ? v.category.includes(cat) : v.category === cat
+          );
+
+          setActionVideos(filterByCat(data.data, 'Action'));
+          setDramaVideos(filterByCat(data.data, 'Drama'));
+          setThrillerVideos(filterByCat(data.data, 'Thriller'));
+          setComedyVideos(filterByCat(data.data, 'Comedy'));
+          setDocumentaryVideos(filterByCat(data.data, 'Documentary'));
+          setRegionalVideos(filterByCat(data.data, 'Regional'));
         } else {
-          // Use Fallback Malayalam Movies if no data
+          // Fallback placeholders
           setTrendingVideos(FALLBACK_VIDEOS);
           setActionVideos(FALLBACK_VIDEOS.filter(v => v.category === 'Action'));
           setDramaVideos(FALLBACK_VIDEOS.filter(v => v.category === 'Drama'));
@@ -180,8 +208,9 @@ export default function Home() {
       } catch (err) {
         console.error('Failed to fetch videos, using placeholders:', err);
         setTrendingVideos(FALLBACK_VIDEOS);
-        setActionVideos(FALLBACK_VIDEOS.filter(v => v.category === 'Action'));
-        setDramaVideos(FALLBACK_VIDEOS.filter(v => v.category === 'Drama'));
+        setActionVideos([]);
+        setDramaVideos([]);
+        setTvSeries([]);
       }
     };
 
@@ -221,7 +250,7 @@ export default function Home() {
                 <p className="hero-description" dangerouslySetInnerHTML={{ __html: slide.description }}></p>
                 
                 <div className="hero-actions">
-                  <Link href={`/watch/${slide.videoId || 'f1'}`}>
+                  <Link href={`/watch/${slide.slug || slide.videoId || 'f1'}`}>
                     <button className="btn-watch-now">
                       <span className="play-icon">▶</span> Watch Now
                     </button>
@@ -251,9 +280,14 @@ export default function Home() {
 
       {/* Video Rows */}
       <div className="content-container">
+        {tvSeries.length > 0 && <ContentRow title="Must-Watch TV Series" videos={tvSeries} />}
         <ContentRow title="Trending Malayalam Hits" videos={trendingVideos} />
         <ContentRow title="Action Packed" videos={actionVideos.length > 0 ? actionVideos : FALLBACK_VIDEOS.slice(0, 3)} />
         <ContentRow title="Soulful Dramas" videos={dramaVideos.length > 0 ? dramaVideos : FALLBACK_VIDEOS.slice(1, 4)} />
+        {thrillerVideos.length > 0 && <ContentRow title="Edge of Seat Thrillers" videos={thrillerVideos} />}
+        {comedyVideos.length > 0 && <ContentRow title="Laugh Out Loud" videos={comedyVideos} />}
+        {documentaryVideos.length > 0 && <ContentRow title="Real Stories" videos={documentaryVideos} />}
+        {regionalVideos.length > 0 && <ContentRow title="Regional Gems" videos={regionalVideos} />}
       </div>
     </div>
   );

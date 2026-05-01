@@ -3,11 +3,14 @@
 import { useRef, useState, useEffect } from 'react';
 import { 
   Play, Pause, Volume2, VolumeX, Maximize, Minimize, 
-  Settings, Loader2, Rewind, FastForward 
+  Settings, Loader2, Rewind, FastForward, SkipBack, SkipForward
 } from 'lucide-react';
 import '@/styles/VideoPlayer.css';
 
-export default function VideoPlayer({ driveFileId, src, poster, useIframe = false }) {
+export default function VideoPlayer({ 
+  driveFileId, src, poster, useIframe = false, onWatchTime, 
+  isBlocked, remainingTime, isAdmin, onNext, onPrev 
+}) {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -23,6 +26,54 @@ export default function VideoPlayer({ driveFileId, src, poster, useIframe = fals
 
   const controlsTimeoutRef = useRef(null);
   const indicatorTimeoutRef = useRef(null);
+  const lastReportedTime = useRef(0);
+
+  const [localRemaining, setLocalRemaining] = useState(remainingTime);
+
+  useEffect(() => {
+    setLocalRemaining(remainingTime);
+  }, [remainingTime]);
+
+  useEffect(() => {
+    let interval;
+    if (isPlaying && !isBlocked && localRemaining !== null && !isAdmin) {
+      interval = setInterval(() => {
+        setLocalRemaining(prev => Math.max(0, prev - 1));
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isPlaying, isBlocked, localRemaining, isAdmin]);
+
+  // Utility for formatting time
+  const formatTime = (seconds) => {
+    if (isNaN(seconds)) return '00:00';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+
+    const padM = m.toString().padStart(2, '0');
+    const padS = s.toString().padStart(2, '0');
+
+    if (h > 0) {
+      const padH = h.toString().padStart(2, '0');
+      return `${padH}:${padM}:${padS}`;
+    }
+    return `${padM}:${padS}`;
+  };
+
+  const formatRemaining = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  // If blocked, force pause
+  useEffect(() => {
+    if (isBlocked && videoRef.current && !videoRef.current.paused) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  }, [isBlocked]);
 
   const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
   let baseSrc = driveFileId 
@@ -56,7 +107,7 @@ export default function VideoPlayer({ driveFileId, src, poster, useIframe = fals
 
   const togglePlay = () => {
     if (!videoRef.current) return;
-    if (videoRef.current.paused) {
+    if (videoRef.current.paused && !isBlocked) {
       videoRef.current.play();
       setIsPlaying(true);
       showAction(<Play size={32} />, 'Play');
@@ -99,32 +150,39 @@ export default function VideoPlayer({ driveFileId, src, poster, useIframe = fals
         case ' ':
         case 'k':
           e.preventDefault();
+          e.stopPropagation();
           togglePlay();
           break;
         case 'ArrowRight':
         case 'l':
           e.preventDefault();
+          e.stopPropagation();
           skip(10);
           break;
         case 'ArrowLeft':
         case 'j':
           e.preventDefault();
+          e.stopPropagation();
           skip(-10);
           break;
         case 'ArrowUp':
           e.preventDefault();
+          e.stopPropagation();
           adjustVolume(0.1);
           break;
         case 'ArrowDown':
           e.preventDefault();
+          e.stopPropagation();
           adjustVolume(-0.1);
           break;
         case 'f':
           e.preventDefault();
+          e.stopPropagation();
           toggleFullscreen();
           break;
         case 'm':
           e.preventDefault();
+          e.stopPropagation();
           if (volume > 0) {
             setVolume(0);
             videoRef.current.volume = 0;
@@ -150,6 +208,58 @@ export default function VideoPlayer({ driveFileId, src, poster, useIframe = fals
     const duration = videoRef.current.duration;
     if (duration > 0) {
       setProgress((current / duration) * 100);
+    }
+
+    // Paywall Time Tracking
+    if (!videoRef.current.paused && !videoRef.current.seeking) {
+      const now = Date.now();
+      if (lastReportedTime.current === 0) {
+        lastReportedTime.current = now;
+      } else {
+        const elapsed = (now - lastReportedTime.current) / 1000;
+        if (elapsed >= 5) {
+          if (onWatchTime) onWatchTime(5);
+          lastReportedTime.current = now;
+        }
+      }
+    } else {
+      lastReportedTime.current = 0;
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (!videoRef.current || !driveFileId) return;
+    
+    const savedPos = localStorage.getItem(`pos_${driveFileId}`);
+    if (savedPos && !isNaN(savedPos)) {
+      const pos = parseFloat(savedPos);
+      // Only resume if we are not at the very end
+      if (pos < videoRef.current.duration - 5) {
+        videoRef.current.currentTime = pos;
+        showAction(null, `Resuming from ${formatTime(pos)}`);
+      }
+    }
+  };
+
+  // Periodic save of position
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (videoRef.current && !videoRef.current.paused && driveFileId) {
+        localStorage.setItem(`pos_${driveFileId}`, videoRef.current.currentTime);
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [driveFileId]);
+
+  const handleEnded = () => {
+    if (driveFileId) {
+      localStorage.removeItem(`pos_${driveFileId}`);
+    }
+    if (onNext) {
+      showAction(<SkipForward size={32} />, 'Auto-playing next...');
+      setTimeout(() => {
+        onNext();
+      }, 2000);
     }
   };
 
@@ -216,22 +326,6 @@ export default function VideoPlayer({ driveFileId, src, poster, useIframe = fals
     }, 100);
   };
 
-  // Format time (e.g., 01:23 or 02:21:05)
-  const formatTime = (seconds) => {
-    if (isNaN(seconds)) return '00:00';
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-
-    const padM = m.toString().padStart(2, '0');
-    const padS = s.toString().padStart(2, '0');
-
-    if (h > 0) {
-      const padH = h.toString().padStart(2, '0');
-      return `${padH}:${padM}:${padS}`;
-    }
-    return `${padM}:${padS}`;
-  };
 
   if (!videoSrc) return <div className="video-placeholder glass">No video source provided</div>;
   
@@ -257,7 +351,35 @@ export default function VideoPlayer({ driveFileId, src, poster, useIframe = fals
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onClick={() => showSettings && setShowSettings(false)}
+      tabIndex={0}
+      style={{ outline: 'none' }}
     >
+      {/* Remaining Time Badge */}
+      {!isAdmin && localRemaining !== null && (
+        <div className="remaining-badge" style={{
+          position: 'absolute',
+          top: '20px',
+          right: '20px',
+          background: localRemaining <= 60 ? 'rgba(239, 68, 68, 0.9)' : 'rgba(0, 0, 0, 0.6)',
+          color: 'white',
+          padding: '8px 16px',
+          borderRadius: '20px',
+          fontSize: '0.9rem',
+          fontWeight: '600',
+          backdropFilter: 'blur(4px)',
+          zIndex: 10,
+          transition: 'all 0.3s ease',
+          border: localRemaining <= 60 ? '1px solid rgba(255, 255, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          opacity: showControls || localRemaining <= 60 ? 1 : 0,
+          transform: showControls || localRemaining <= 60 ? 'translateY(0)' : 'translateY(-10px)',
+          pointerEvents: 'none'
+        }}>
+          <span style={{ marginRight: '6px' }}>⏱️</span>
+          Free Preview: {formatRemaining(localRemaining)}
+        </div>
+      )}
+
       {/* Loading State */}
       {isLoading && (
         <div className="video-loader">
@@ -282,11 +404,13 @@ export default function VideoPlayer({ driveFileId, src, poster, useIframe = fals
         poster={poster}
         className="main-video"
         onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
         onClick={togglePlay}
         onWaiting={() => setIsLoading(true)}
         onPlaying={() => { setIsLoading(false); setIsPlaying(true); }}
         onCanPlay={() => setIsLoading(false)}
         onPause={() => setIsPlaying(false)}
+        onEnded={handleEnded}
         preload="auto"
         controlsList="nodownload"
         crossOrigin="anonymous"
@@ -312,6 +436,18 @@ export default function VideoPlayer({ driveFileId, src, poster, useIframe = fals
             <button onClick={togglePlay} className="control-btn icon-btn">
               {isPlaying ? <Pause size={20} /> : <Play size={20} />}
             </button>
+
+            {onPrev && (
+              <button onClick={onPrev} className="control-btn icon-btn" title="Previous Episode">
+                <SkipBack size={20} />
+              </button>
+            )}
+
+            {onNext && (
+              <button onClick={onNext} className="control-btn icon-btn" title="Next Episode">
+                <SkipForward size={20} />
+              </button>
+            )}
             
             <div className="time-display">
               {videoRef.current ? formatTime(videoRef.current.currentTime) : '00:00'} / 
@@ -341,7 +477,22 @@ export default function VideoPlayer({ driveFileId, src, poster, useIframe = fals
                 className="control-btn icon-btn" 
                 onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); }}
               >
-                <Settings size={20} className={showSettings ? 'spin' : ''} />
+                <div style={{ position: 'relative' }}>
+                  <Settings size={20} className={showSettings ? 'spin' : ''} />
+                  {(quality === '1080' || quality === '720') && (
+                    <span style={{
+                      position: 'absolute',
+                      top: '-8px',
+                      right: '-8px',
+                      fontSize: '8px',
+                      background: 'var(--primary)',
+                      color: 'white',
+                      padding: '2px 4px',
+                      borderRadius: '4px',
+                      fontWeight: '800'
+                    }}>HD</span>
+                  )}
+                </div>
               </button>
               
               {showSettings && (
@@ -359,22 +510,18 @@ export default function VideoPlayer({ driveFileId, src, poster, useIframe = fals
                     ))}
                   </div>
 
-                  {videoSrc && videoSrc.includes('res.cloudinary.com') && (
-                    <>
-                      <div className="settings-header" style={{marginTop: '0.5rem'}}>Quality</div>
-                      <div className="settings-options-grid">
-                        {['auto', '1080', '720', '480'].map(q => (
-                          <button 
-                            key={`quality-${q}`} 
-                            className={`settings-option ${quality === q ? 'active' : ''}`}
-                            onClick={() => changeQuality(q)}
-                          >
-                            {q === 'auto' ? 'Auto' : `${q}p`}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
+                  <div className="settings-header" style={{marginTop: '0.5rem'}}>Quality</div>
+                  <div className="settings-options-grid">
+                    {['auto', '1080', '720', '480'].map(q => (
+                      <button 
+                        key={`quality-${q}`} 
+                        className={`settings-option ${quality === q ? 'active' : ''}`}
+                        onClick={() => changeQuality(q)}
+                      >
+                        {q === 'auto' ? 'Auto (Best)' : `${q}p`}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

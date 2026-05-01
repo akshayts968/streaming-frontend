@@ -10,6 +10,7 @@ export default function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
+  const router = require('next/navigation').useRouter();
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -46,11 +47,15 @@ export default function Navbar() {
     window.location.href = '/';
   };
 
+  const handleSubscribeClick = () => {
+    router.push('/subscribe');
+  };
+
   return (
     <nav className="navbar">
       <div className="navContainer">
         <Link href="/" className="logo">
-          ANTIGRAVITY<span>STREAM</span>
+          <img src="/logo.jpg" alt="ANTIGRAVITY STREAM" className="nav-logo-img" style={{ height: '32px', width: 'auto', borderRadius: '4px' }} />
         </Link>
         
         <div className="searchBarContainer">
@@ -64,12 +69,19 @@ export default function Navbar() {
           </div>
           {searchResults.length > 0 && (
             <div className="searchResults glass">
-              {searchResults.map(video => (
-                <Link key={video._id} href={`/watch/${video._id}`} className="searchItem" onClick={() => setSearchQuery('')}>
-                  <img src={video.thumbnailUrl} alt="" className="searchThumb" />
+              {searchResults.map(item => (
+                <Link 
+                  key={item._id} 
+                  href={item.resultType === 'series' ? `/series/${item.slug || item._id}` : `/watch/${item.slug || item._id}`} 
+                  className="searchItem" 
+                  onClick={() => setSearchQuery('')}
+                >
+                  <img src={item.thumbnailUrl} alt="" className="searchThumb" />
                   <div className="searchInfo">
-                    <span className="searchTitle">{video.title}</span>
-                    <span className="searchMeta">{video.category}</span>
+                    <span className="searchTitle">{item.title}</span>
+                    <span className="searchMeta">
+                      {item.resultType === 'series' ? 'TV Series' : 'Movie'} • {Array.isArray(item.category) ? item.category.join(', ') : item.category}
+                    </span>
                   </div>
                 </Link>
               ))}
@@ -80,6 +92,9 @@ export default function Navbar() {
         <div className="navLinks">
           <Link href="/browse">Browse</Link>
           <Link href="/watchlist">My List</Link>
+          <button className="btn-subscribe-nav" onClick={handleSubscribeClick}>
+            Subscribe
+          </button>
           
           {isLoggedIn ? (
             <div className="user-section">

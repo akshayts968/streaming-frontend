@@ -59,6 +59,7 @@ export default function RegisterPage() {
   return (
     <div className="auth-page">
       <div className="auth-card glass">
+        <img src="/logo.jpg" alt="Logo" style={{ height: '60px', margin: '0 auto 1.5rem', display: 'block', borderRadius: '8px' }} />
         <h2>Create Account</h2>
         <p className="auth-subtitle">Join the Antigravity community</p>
         

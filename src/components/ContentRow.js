@@ -33,7 +33,7 @@ export default function ContentRow({ title, videos = [] }) {
         <div className="content-row" ref={rowRef}>
           {videos.map((video) => (
             <div key={video._id} className="video-card">
-              <Link href={`/watch/${video._id}`}>
+              <Link href={video.isSeries ? `/series/${video.slug || video._id}` : `/watch/${video.slug || video._id}`}>
                 <div className="thumbnail-wrapper">
                   <img 
                     src={video.thumbnailUrl || '/no-thumbnail.jpg'} 
@@ -48,7 +48,7 @@ export default function ContentRow({ title, videos = [] }) {
               <div className="video-info">
                 <h3 className="video-title">{video.title}</h3>
                 <div className="video-meta">
-                  <span className="category">{video.category}</span>
+                  <span className="category">{Array.isArray(video.category) ? video.category.join(', ') : video.category}</span>
                   <span className="dot">•</span>
                   <span className="views">{video.views || '0'} views</span>
                 </div>
