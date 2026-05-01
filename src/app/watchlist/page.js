@@ -10,8 +10,15 @@ export default function WatchlistPage() {
   useEffect(() => {
     const fetchWatchlist = async () => {
       try {
-        // Note: In a real app, this would use a token from auth context
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/watchlist`);
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setLoading(false);
+          return;
+        }
+        
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/watchlist`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         const data = await res.json();
         if (data.success) {
           setList(data.data);

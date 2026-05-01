@@ -111,6 +111,7 @@ export default function Home() {
   const [comedyVideos, setComedyVideos] = useState([]);
   const [documentaryVideos, setDocumentaryVideos] = useState([]);
   const [regionalVideos, setRegionalVideos] = useState([]);
+  const [continueWatching, setContinueWatching] = useState([]);
   const [tvSeries, setTvSeries] = useState([]);
   const [activeSlide, setActiveSlide] = useState(0);
   const [heroSlides, setHeroSlides] = useState(HERO_SLIDES);
@@ -135,7 +136,7 @@ export default function Home() {
     if (heroSlides.length === 0) return;
     const interval = setInterval(() => {
       setActiveSlide((prev) => (prev + 1) % heroSlides.length);
-    }, 5000);
+    }, 7000);
 
     return () => clearInterval(interval);
   }, [heroSlides.length]);
@@ -149,15 +150,41 @@ export default function Home() {
   useEffect(() => {
     const fetchVideos = async () => {
       try {
-        const [res, heroRes, seriesRes] = await Promise.all([
+        const token = localStorage.getItem('token');
+        const fetchPromises = [
           fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos`),
           fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos?isHero=true`),
           fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/series`)
-        ]);
+        ];
         
-        const data = await res.json();
-        const heroData = await heroRes.json();
-        const seriesData = await seriesRes.json();
+        if (token) {
+          fetchPromises.push(
+            fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/history`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            }).catch(() => null)
+          );
+        }
+
+        const responses = await Promise.all(fetchPromises);
+        
+        const data = await responses[0].json();
+        const heroData = await responses[1].json();
+        const seriesData = await responses[2].json();
+        
+        if (token && responses[3]) {
+          try {
+            const historyData = await responses[3].json();
+            if (historyData.success && historyData.data) {
+              // Map history format to video format for ContentRow
+              const cw = historyData.data.map(h => ({
+                ...h.video,
+                // Add a visual progress indicator based on saved timestamp
+                progress: h.timestamp ? h.timestamp : 0 
+              }));
+              setContinueWatching(cw);
+            }
+          } catch(e) {}
+        }
         
         if (heroData.success && heroData.data.length > 0) {
           const formattedHero = heroData.data.map((v, i) => ({
@@ -278,9 +305,16 @@ export default function Home() {
         </section>
       )}
 
-      {/* Video Rows */}
+      {/* Main Content Sections */}
       <div className="content-container">
-        {tvSeries.length > 0 && <ContentRow title="Must-Watch TV Series" videos={tvSeries} />}
+        {continueWatching.length > 0 && (
+          <ContentRow title="Continue Watching" videos={continueWatching} />
+        )}
+        
+        {tvSeries.length > 0 && (
+          <ContentRow title="TV Series" videos={tvSeries} isSeries={true} />
+        )}
+        
         <ContentRow title="Trending Malayalam Hits" videos={trendingVideos} />
         <ContentRow title="Action Packed" videos={actionVideos.length > 0 ? actionVideos : FALLBACK_VIDEOS.slice(0, 3)} />
         <ContentRow title="Soulful Dramas" videos={dramaVideos.length > 0 ? dramaVideos : FALLBACK_VIDEOS.slice(1, 4)} />

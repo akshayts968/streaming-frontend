@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import VideoPlayer from '@/components/VideoPlayer';
+import ContentRow from '@/components/ContentRow';
 import '@/styles/Watch.css';
 
 export default function WatchPage({ params: paramsPromise }) {
@@ -19,6 +20,10 @@ export default function WatchPage({ params: paramsPromise }) {
 
   const [remainingTime, setRemainingTime] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isInWatchlist, setIsInWatchlist] = useState(false);
+  const [initialTime, setInitialTime] = useState(0);
+  const [relatedVideos, setRelatedVideos] = useState([]);
+  const [localUseIframe, setLocalUseIframe] = useState(false);
 
   useEffect(() => {
     const fetchRemainingTime = async () => {
@@ -151,13 +156,48 @@ export default function WatchPage({ params: paramsPromise }) {
         const data = await res.json();
         if (data.success) {
           setMovieData(data.data);
+          setLocalUseIframe(data.data.useIframe || false);
           setNextEpisodeId(data.data.nextEpisodeId);
           setPrevEpisodeId(data.data.prevEpisodeId);
           setNextEpisodeSlug(data.data.nextEpisodeSlug);
           setPrevEpisodeSlug(data.data.prevEpisodeSlug);
+          
+          // Fetch related videos
+          const cats = Array.isArray(data.data.category) ? data.data.category : [data.data.category];
+          if (cats.length > 0) {
+            const relRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/videos?category=${encodeURIComponent(cats[0])}`);
+            const relData = await relRes.json();
+            if (relData.success) {
+              setRelatedVideos(relData.data.filter(v => v._id !== movieId).slice(0, 8));
+            }
+          }
+        }
+
+        // Check if in watchlist & history
+        const token = localStorage.getItem('token');
+        if (token) {
+          const wlRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/watchlist`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          const wlData = await wlRes.json();
+          if (wlData.success) {
+            const exists = wlData.data.some(item => item.video._id === movieId || item.video === movieId);
+            setIsInWatchlist(exists);
+          }
+
+          const histRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/history`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          const histData = await histRes.json();
+          if (histData.success) {
+            const histItem = histData.data.find(item => item.video._id === movieId || item.video === movieId);
+            if (histItem) {
+              setInitialTime(histItem.timestamp || 0);
+            }
+          }
         }
       } catch (err) {
-        console.error('Failed to fetch movie details:', err);
+        console.error('Failed to fetch details:', err);
       } finally {
         setLoading(false);
       }
@@ -166,6 +206,30 @@ export default function WatchPage({ params: paramsPromise }) {
     fetchMovieDetails();
   }, [movieId]);
 
+  const toggleWatchlist = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert('Please login to add to your watchlist.');
+      return;
+    }
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/watchlist`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ videoId: movieId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsInWatchlist(!isInWatchlist);
+      }
+    } catch (err) {
+      console.error('Failed to update watchlist', err);
+    }
+  };
+
   if (loading) return <div className="watch-loading glass">Loading cinematic experience...</div>;
   if (!movieData) return <div className="watch-error glass">Video not found</div>;
 
@@ -173,10 +237,12 @@ export default function WatchPage({ params: paramsPromise }) {
     <div className="watch-page">
       <div className="player-section" style={{ position: 'relative' }}>
         <VideoPlayer 
+          videoId={movieId}
+          initialTime={initialTime}
           driveFileId={movieData.drive_file_id} 
           src={movieData.videoUrl} 
           poster={movieData.thumbnailUrl} 
-          useIframe={movieData.useIframe}
+          useIframe={localUseIframe}
           onWatchTime={handleWatchTime}
           isBlocked={isBlocked}
           remainingTime={remainingTime}
@@ -184,6 +250,23 @@ export default function WatchPage({ params: paramsPromise }) {
           onNext={nextEpisodeId ? handleNext : null}
           onPrev={prevEpisodeId ? handlePrev : null}
         />
+
+        {/* Player Mode Toggle */}
+        <div style={{ padding: '10px 20px', display: 'flex', justifyContent: 'flex-end', background: '#0a0a0a' }}>
+          <button 
+            onClick={() => setLocalUseIframe(!localUseIframe)}
+            style={{ 
+              background: 'rgba(255,255,255,0.1)', color: '#ccc', border: '1px solid rgba(255,255,255,0.2)', 
+              padding: '6px 14px', borderRadius: '20px', fontSize: '0.85rem', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s'
+            }}
+            onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = '#fff'; }}
+            onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#ccc'; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            Switch to {localUseIframe ? 'Custom Player' : 'Native Player'}
+          </button>
+        </div>
 
         {isBlocked && (
           <div className="paywall-overlay" style={{
@@ -222,8 +305,12 @@ export default function WatchPage({ params: paramsPromise }) {
         <div className="meta-header">
           <div className="title-row">
             <h1 className="movie-title">{movieData.title}</h1>
-            <button className="btn-watchlist glass">
-              <span className="plus">+</span> My List
+            <button className="btn-watchlist glass" onClick={toggleWatchlist} style={{ backgroundColor: isInWatchlist ? 'rgba(255,255,255,0.1)' : '' }}>
+              {isInWatchlist ? (
+                <><span className="check">✓</span> In List</>
+              ) : (
+                <><span className="plus">+</span> My List</>
+              )}
             </button>
           </div>
           <div className="meta-info">
@@ -240,6 +327,14 @@ export default function WatchPage({ params: paramsPromise }) {
           <div className="creator-name">Published by <span>{movieData.creator?.username}</span></div>
         </div>
       </div>
+
+      {/* More Like This Section */}
+      {relatedVideos.length > 0 && (
+        <div style={{ padding: '0 5%', paddingBottom: '3rem' }}>
+          <ContentRow title="More Like This" videos={relatedVideos} />
+        </div>
+      )}
+
       {/* Dummy Payment Modal */}
       {showPaymentModal && (
         <div className="payment-modal-overlay" style={{

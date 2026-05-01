@@ -8,7 +8,7 @@ import {
 import '@/styles/VideoPlayer.css';
 
 export default function VideoPlayer({ 
-  driveFileId, src, poster, useIframe = false, onWatchTime, 
+  videoId, initialTime = 0, driveFileId, src, poster, useIframe = false, onWatchTime, 
   isBlocked, remainingTime, isAdmin, onNext, onPrev 
 }) {
   const videoRef = useRef(null);
@@ -108,9 +108,15 @@ export default function VideoPlayer({
   const togglePlay = () => {
     if (!videoRef.current) return;
     if (videoRef.current.paused && !isBlocked) {
-      videoRef.current.play();
-      setIsPlaying(true);
-      showAction(<Play size={32} />, 'Play');
+      const playPromise = videoRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          setIsPlaying(true);
+          showAction(<Play size={32} />, 'Play');
+        }).catch(error => {
+          console.log("Playback interrupted by player switch:", error);
+        });
+      }
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
@@ -228,11 +234,16 @@ export default function VideoPlayer({
   };
 
   const handleLoadedMetadata = () => {
-    if (!videoRef.current || !driveFileId) return;
+    if (!videoRef.current) return;
     
-    const savedPos = localStorage.getItem(`pos_${driveFileId}`);
-    if (savedPos && !isNaN(savedPos)) {
-      const pos = parseFloat(savedPos);
+    // First try database initialTime, fallback to local storage
+    let pos = initialTime;
+    if (!pos && driveFileId) {
+      const savedPos = localStorage.getItem(`pos_${driveFileId}`);
+      if (savedPos && !isNaN(savedPos)) pos = parseFloat(savedPos);
+    }
+
+    if (pos > 0) {
       // Only resume if we are not at the very end
       if (pos < videoRef.current.duration - 5) {
         videoRef.current.currentTime = pos;
@@ -243,13 +254,36 @@ export default function VideoPlayer({
 
   // Periodic save of position
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (videoRef.current && !videoRef.current.paused && driveFileId) {
-        localStorage.setItem(`pos_${driveFileId}`, videoRef.current.currentTime);
+    const interval = setInterval(async () => {
+      if (videoRef.current && !videoRef.current.paused) {
+        const currentTime = videoRef.current.currentTime;
+        
+        // 1. Local fallback save
+        if (driveFileId) {
+          localStorage.setItem(`pos_${driveFileId}`, currentTime);
+        }
+
+        // 2. Database save
+        const token = localStorage.getItem('token');
+        if (token && videoId) {
+          try {
+            await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/history`, {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({ videoId, timestamp: currentTime })
+            });
+          } catch(err) {
+            console.error('Failed to sync history', err);
+          }
+        }
       }
-    }, 5000);
+    }, 10000); // Save every 10 seconds to avoid spamming the DB
+    
     return () => clearInterval(interval);
-  }, [driveFileId]);
+  }, [driveFileId, videoId]);
 
   const handleEnded = () => {
     if (driveFileId) {
