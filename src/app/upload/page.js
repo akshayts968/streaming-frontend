@@ -3,6 +3,20 @@
 import { useState, useEffect, useRef } from 'react';
 import '@/styles/Upload.css';
 
+const AVAILABLE_CATEGORIES = [
+  'Action',
+  'Drama',
+  'Thriller',
+  'Comedy',
+  'Sci-Fi',
+  'Horror',
+  'Romance',
+  'Adventure',
+  'Animation',
+  'Documentary',
+  'Regional'
+];
+
 export default function UploadPage() {
   const [videoFile, setVideoFile] = useState(null);
   const [thumbFile, setThumbFile] = useState(null);
@@ -10,10 +24,15 @@ export default function UploadPage() {
   const [metadata, setMetadata] = useState({
     title: '',
     description: '',
-    category: 'Action',
+    category: ['Action'],
     tags: '',
-    storageProvider: 'drive'
+    storageProvider: 'telegram',
+    type: 'Movie',
+    seriesId: '',
+    seasonNumber: 1,
+    episodeNumber: 1
   });
+  const [allSeries, setAllSeries] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('');
@@ -26,6 +45,20 @@ export default function UploadPage() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) window.location.href = '/auth/login';
+
+    const fetchSeries = async () => {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/series`);
+        const data = await res.json();
+        if (data.success && data.data) {
+          setAllSeries(data.data);
+          if (data.data.length > 0) {
+            setMetadata(prev => ({ ...prev, seriesId: data.data[0]._id }));
+          }
+        }
+      } catch (err) {}
+    };
+    fetchSeries();
   }, []);
 
   const handleVideoChange = (e) => {
@@ -94,8 +127,14 @@ export default function UploadPage() {
         if (i === totalChunks - 1) {
           formData.append('title', metadata.title);
           formData.append('description', metadata.description);
-          formData.append('category', metadata.category);
+          formData.append('category', Array.isArray(metadata.category) ? metadata.category.join(',') : metadata.category);
           formData.append('tags', metadata.tags);
+      if (metadata.type === 'Episode') {
+        formData.append('type', 'Episode');
+        formData.append('seriesId', metadata.seriesId);
+        formData.append('seasonNumber', metadata.seasonNumber);
+        formData.append('episodeNumber', metadata.episodeNumber);
+      }
           if (thumbFile) formData.append('thumbnail', thumbFile);
         }
 
@@ -169,7 +208,7 @@ export default function UploadPage() {
       if (thumbFile) formData.append('thumbnail', thumbFile);
       formData.append('title', metadata.title);
       formData.append('description', metadata.description);
-      formData.append('category', metadata.category);
+      formData.append('category', Array.isArray(metadata.category) ? metadata.category.join(',') : metadata.category);
       formData.append('tags', metadata.tags);
 
       const endpoint = metadata.storageProvider === 'cloudinary' 
@@ -262,9 +301,86 @@ export default function UploadPage() {
           </div>
 
           <div className="form-grid">
+            <div className="input-group full" style={{ display: 'flex', gap: '10px', marginBottom: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() => setMetadata({ ...metadata, type: 'Movie' })}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  borderRadius: '6px',
+                  border: metadata.type !== 'Episode' ? '2px solid #e50914' : '1px solid #444',
+                  background: metadata.type !== 'Episode' ? 'rgba(229, 9, 20, 0.2)' : 'transparent',
+                  color: '#fff',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                🎬 Movie
+              </button>
+              <button
+                type="button"
+                onClick={() => setMetadata({ ...metadata, type: 'Episode', seriesId: metadata.seriesId || (allSeries[0]?._id || '') })}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  borderRadius: '6px',
+                  border: metadata.type === 'Episode' ? '2px solid #60a5fa' : '1px solid #444',
+                  background: metadata.type === 'Episode' ? 'rgba(96, 165, 250, 0.2)' : 'transparent',
+                  color: '#fff',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                📺 TV Series Episode
+              </button>
+            </div>
+
+            {metadata.type === 'Episode' && (
+              <div className="input-group full" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '12px', borderRadius: '8px', marginBottom: '1rem' }}>
+                <label style={{ color: '#93c5fd', marginBottom: '6px' }}>Select Series *</label>
+                {allSeries.length > 0 ? (
+                  <select
+                    value={metadata.seriesId}
+                    onChange={(e) => setMetadata({ ...metadata, seriesId: e.target.value })}
+                    style={{ width: '100%', padding: '10px', background: '#1a1a1a', border: '1px solid #444', borderRadius: '6px', color: '#fff', marginBottom: '10px' }}
+                  >
+                    {allSeries.map(s => (
+                      <option key={s._id} value={s._id}>{s.title} ({s.language})</option>
+                    ))}
+                  </select>
+                ) : (
+                  <p style={{ color: '#aaa', fontSize: '0.85rem', marginBottom: '10px' }}>No series found. Create one in Admin Dashboard first.</p>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={{ color: '#93c5fd' }}>Season Number</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={metadata.seasonNumber}
+                      onChange={(e) => setMetadata({ ...metadata, seasonNumber: parseInt(e.target.value, 10) || 1 })}
+                      style={{ width: '100%', padding: '10px', background: '#1a1a1a', border: '1px solid #444', borderRadius: '6px', color: '#fff' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: '#93c5fd' }}>Episode Number</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={metadata.episodeNumber}
+                      onChange={(e) => setMetadata({ ...metadata, episodeNumber: parseInt(e.target.value, 10) || 1 })}
+                      style={{ width: '100%', padding: '10px', background: '#1a1a1a', border: '1px solid #444', borderRadius: '6px', color: '#fff' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="input-group full">
-              <label>Title</label>
-              <input type="text" name="title" required value={metadata.title} onChange={(e) => setMetadata({...metadata, title: e.target.value})} />
+              <label>{metadata.type === 'Episode' ? 'Episode Title' : 'Title'}</label>
+              <input type="text" name="title" required value={metadata.title} placeholder={metadata.type === 'Episode' ? 'e.g. Chapter One: The Vanishing' : 'e.g. Spider-Man (2002)'} onChange={(e) => setMetadata({...metadata, title: e.target.value})} />
             </div>
 
             <div className="input-group">

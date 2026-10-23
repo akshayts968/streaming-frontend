@@ -242,7 +242,7 @@ export default function WatchPage({ params: paramsPromise }) {
           driveFileId={movieData.drive_file_id} 
           src={movieData.videoUrl} 
           poster={movieData.thumbnailUrl} 
-          useIframe={localUseIframe}
+          useIframe={false}
           onWatchTime={handleWatchTime}
           isBlocked={isBlocked}
           remainingTime={remainingTime}
@@ -250,23 +250,6 @@ export default function WatchPage({ params: paramsPromise }) {
           onNext={nextEpisodeId ? handleNext : null}
           onPrev={prevEpisodeId ? handlePrev : null}
         />
-
-        {/* Player Mode Toggle */}
-        <div style={{ padding: '10px 20px', display: 'flex', justifyContent: 'flex-end', background: '#0a0a0a' }}>
-          <button 
-            onClick={() => setLocalUseIframe(!localUseIframe)}
-            style={{ 
-              background: 'rgba(255,255,255,0.1)', color: '#ccc', border: '1px solid rgba(255,255,255,0.2)', 
-              padding: '6px 14px', borderRadius: '20px', fontSize: '0.85rem', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s'
-            }}
-            onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = '#fff'; }}
-            onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#ccc'; }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-            Switch to {localUseIframe ? 'Custom Player' : 'Native Player'}
-          </button>
-        </div>
 
         {isBlocked && (
           <div className="paywall-overlay" style={{

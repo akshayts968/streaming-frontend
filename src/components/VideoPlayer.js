@@ -27,6 +27,7 @@ export default function VideoPlayer({
   const controlsTimeoutRef = useRef(null);
   const indicatorTimeoutRef = useRef(null);
   const lastReportedTime = useRef(0);
+  const hasAttemptedAutoplay = useRef(false);
 
   const [localRemaining, setLocalRemaining] = useState(remainingTime);
 
@@ -89,6 +90,13 @@ export default function VideoPlayer({
 
   const videoSrc = getCloudinaryUrl(baseSrc, quality);
 
+  useEffect(() => {
+    hasAttemptedAutoplay.current = false;
+    if (videoRef.current && !isBlocked) {
+      attemptAutoplay();
+    }
+  }, [videoSrc, isBlocked]);
+
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
@@ -105,8 +113,43 @@ export default function VideoPlayer({
     }, 800);
   };
 
+    const attemptAutoplay = () => {
+    if (!videoRef.current || isBlocked) return;
+    const playPromise = videoRef.current.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          setIsPlaying(true);
+        })
+        .catch((error) => {
+          if (error.name === 'NotAllowedError') {
+            console.log('Autoplay unmuted blocked by browser policy, attempting muted autoplay...');
+            if (videoRef.current) {
+              videoRef.current.muted = true;
+              setVolume(0);
+              videoRef.current.play()
+                .then(() => {
+                  setIsPlaying(true);
+                  showAction(<VolumeX size={32} />, 'Muted Autoplay (Click to Unmute)');
+                })
+                .catch((e) => console.log('Muted autoplay also blocked:', e));
+            }
+          } else {
+            console.log('Autoplay error:', error);
+          }
+        });
+    }
+  };
+
   const togglePlay = () => {
     if (!videoRef.current) return;
+    if (videoRef.current.muted) {
+      videoRef.current.muted = false;
+      setVolume(1);
+      videoRef.current.volume = 1;
+      showAction(<Volume2 size={32} />, 'Unmuted (100%)');
+      return;
+    }
     if (videoRef.current.paused && !isBlocked) {
       const playPromise = videoRef.current.play();
       if (playPromise !== undefined) {
@@ -436,13 +479,21 @@ export default function VideoPlayer({
         ref={videoRef}
         src={videoSrc}
         poster={poster}
+        autoPlay
+        playsInline
         className="main-video"
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onClick={togglePlay}
         onWaiting={() => setIsLoading(true)}
         onPlaying={() => { setIsLoading(false); setIsPlaying(true); }}
-        onCanPlay={() => setIsLoading(false)}
+        onCanPlay={() => {
+          setIsLoading(false);
+          if (!hasAttemptedAutoplay.current && !isBlocked) {
+            hasAttemptedAutoplay.current = true;
+            attemptAutoplay();
+          }
+        }}
         onPause={() => setIsPlaying(false)}
         onEnded={handleEnded}
         preload="auto"
