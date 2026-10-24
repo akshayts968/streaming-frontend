@@ -249,6 +249,7 @@ export default function WatchPage({ params: paramsPromise }) {
           isAdmin={isAdmin}
           onNext={nextEpisodeId ? handleNext : null}
           onPrev={prevEpisodeId ? handlePrev : null}
+          nextVideoId={nextEpisodeId || (relatedVideos.length > 0 ? (relatedVideos[0].drive_file_id || relatedVideos[0]._id) : null)}
         />
 
         {isBlocked && (

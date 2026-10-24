@@ -3,26 +3,45 @@
 import { useRef, useState, useEffect } from 'react';
 import { 
   Play, Pause, Volume2, VolumeX, Maximize, Minimize, 
-  Settings, Loader2, Rewind, FastForward, SkipBack, SkipForward
+  Settings, Loader2, RotateCw, RotateCcw, SkipBack, SkipForward,
+  Rotate3d, Languages, Subtitles
 } from 'lucide-react';
+import Hls from 'hls.js';
+import { prefetchNextVideo } from '@/utils/useVideoPrefetch';
 import '@/styles/VideoPlayer.css';
 
 export default function VideoPlayer({ 
   videoId, initialTime = 0, driveFileId, src, poster, useIframe = false, onWatchTime, 
-  isBlocked, remainingTime, isAdmin, onNext, onPrev 
+  isBlocked, remainingTime, isAdmin, onNext, onPrev, nextVideoId 
 }) {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
+  const progressBarRef = useRef(null);
+  const hlsRef = useRef(null);
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [bufferedProgress, setBufferedProgress] = useState(0);
   const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showSettings, setShowSettings] = useState(false);
   const [actionIndicator, setActionIndicator] = useState(null);
-  const [quality, setQuality] = useState('auto'); // auto, 1080, 720, 480
+  const [quality, setQuality] = useState('360');
+  const [rotationAngle, setRotationAngle] = useState(0);
+
+  // Multi-Audio & Subtitle Tracks State
+  const [audioTracks, setAudioTracks] = useState([]);
+  const [currentAudioTrack, setCurrentAudioTrack] = useState(-1);
+  const [subtitleTracks, setSubtitleTracks] = useState([]);
+  const [currentSubtitleTrack, setCurrentSubtitleTrack] = useState(-1);
+  const [showTracksMenu, setShowTracksMenu] = useState(false); // Audio / Subtitle modal
+
+  // Hover progress preview
+  const [hoverPosition, setHoverPosition] = useState(null);
 
   const controlsTimeoutRef = useRef(null);
   const indicatorTimeoutRef = useRef(null);
@@ -45,13 +64,11 @@ export default function VideoPlayer({
     return () => clearInterval(interval);
   }, [isPlaying, isBlocked, localRemaining, isAdmin]);
 
-  // Utility for formatting time
   const formatTime = (seconds) => {
-    if (isNaN(seconds)) return '00:00';
+    if (isNaN(seconds) || seconds < 0) return '00:00';
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
-
     const padM = m.toString().padStart(2, '0');
     const padS = s.toString().padStart(2, '0');
 
@@ -77,33 +94,135 @@ export default function VideoPlayer({
   }, [isBlocked]);
 
   const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
-  let baseSrc = driveFileId 
-    ? `${backendUrl}/api/videos/stream/${driveFileId}` 
-    : src;
+  const targetId = driveFileId || videoId;
 
-  // Apply Cloudinary quality transformations
-  const getCloudinaryUrl = (url, q) => {
-    if (!url || !url.includes('res.cloudinary.com')) return url;
-    if (q === 'auto') return url.replace('/upload/', '/upload/q_auto,f_auto/');
-    return url.replace('/upload/', `/upload/q_auto,f_auto,c_scale,h_${q}/`);
+  // Hls.js initialization with fallback to progressive range streaming
+  useEffect(() => {
+    if (!videoRef.current || !targetId) return;
+
+    const videoEl = videoRef.current;
+    const hlsUrl = `${backendUrl}/api/videos/hls/${targetId}/master.m3u8`;
+    const fallbackStreamUrl = `${backendUrl}/api/videos/stream-tg/${targetId}`;
+
+    // Clean up previous Hls instance
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    // Fetch available audio & subtitle tracks definition
+    const tracksMetaUrl = `${backendUrl}/api/videos/hls/${targetId}/tracks.json`;
+    fetch(tracksMetaUrl)
+      .then(res => res.json())
+      .then(data => {
+        if (data.audioTracks && data.audioTracks.length > 0) {
+          setAudioTracks(data.audioTracks);
+          setCurrentAudioTrack(0);
+        }
+        if (data.subtitles && data.subtitles.length > 0) {
+          setSubtitleTracks(data.subtitles);
+        }
+      })
+      .catch(() => {});
+
+    // Check if master.m3u8 is available
+    fetch(hlsUrl, { method: 'HEAD' })
+      .then((res) => {
+        if (res.ok && res.status === 200 && Hls.isSupported()) {
+          // Initialize HLS.js
+          const hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 90,
+          });
+          hlsRef.current = hls;
+          hls.loadSource(hlsUrl);
+          hls.attachMedia(videoEl);
+
+          // Audio tracks updated event
+          hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (event, data) => {
+            if (data && data.audioTracks) {
+              setAudioTracks(data.audioTracks);
+              setCurrentAudioTrack(hls.audioTrack);
+            }
+          });
+
+          // Subtitle tracks updated event
+          hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, (event, data) => {
+            if (data && data.subtitleTracks) {
+              setSubtitleTracks(data.subtitleTracks);
+              setCurrentSubtitleTrack(hls.subtitleTrack);
+            }
+          });
+
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            setIsLoading(false);
+            attemptAutoplay();
+          });
+
+          hls.on(Hls.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  hls.startLoad();
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  hls.recoverMediaError();
+                  break;
+                default:
+                  hls.destroy();
+                  videoEl.src = fallbackStreamUrl;
+                  videoEl.load();
+                  break;
+              }
+            }
+          });
+        } else {
+          // Fallback to standard range stream
+          videoEl.src = fallbackStreamUrl;
+          videoEl.load();
+          setIsLoading(false);
+          attemptAutoplay();
+        }
+      })
+      .catch(() => {
+        videoEl.src = fallbackStreamUrl;
+        videoEl.load();
+        setIsLoading(false);
+        attemptAutoplay();
+      });
+
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+  }, [targetId, backendUrl]);
+
+  const selectAudioTrack = (index) => {
+    if (hlsRef.current) {
+      hlsRef.current.audioTrack = index;
+      setCurrentAudioTrack(index);
+      const name = audioTracks[index]?.name || `Track ${index + 1}`;
+      showAction(<Languages size={32} />, `Audio: ${name}`);
+    }
   };
 
-  const videoSrc = getCloudinaryUrl(baseSrc, quality);
-
-  useEffect(() => {
-    hasAttemptedAutoplay.current = false;
-    if (videoRef.current && !isBlocked) {
-      attemptAutoplay();
+  const selectSubtitleTrack = (index) => {
+    setCurrentSubtitleTrack(index);
+    if (hlsRef.current) {
+      hlsRef.current.subtitleTrack = index;
     }
-  }, [videoSrc, isBlocked]);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      clearTimeout(controlsTimeoutRef.current);
-      clearTimeout(indicatorTimeoutRef.current);
-    };
-  }, []);
+    // Update HTML5 video textTracks directly for progressive MP4 stream fallback
+    if (videoRef.current && videoRef.current.textTracks) {
+      for (let i = 0; i < videoRef.current.textTracks.length; i++) {
+        videoRef.current.textTracks[i].mode = (i === index) ? 'showing' : 'disabled';
+      }
+    }
+    const name = index === -1 ? 'Off' : (subtitleTracks[index]?.name || `Subtitle ${index + 1}`);
+    showAction(<Subtitles size={32} />, `Subtitles: ${name}`);
+  };
 
   const showAction = (icon, text) => {
     setActionIndicator({ icon, text });
@@ -113,7 +232,7 @@ export default function VideoPlayer({
     }, 800);
   };
 
-    const attemptAutoplay = () => {
+  const attemptAutoplay = () => {
     if (!videoRef.current || isBlocked) return;
     const playPromise = videoRef.current.play();
     if (playPromise !== undefined) {
@@ -123,43 +242,46 @@ export default function VideoPlayer({
         })
         .catch((error) => {
           if (error.name === 'NotAllowedError') {
-            console.log('Autoplay unmuted blocked by browser policy, attempting muted autoplay...');
             if (videoRef.current) {
               videoRef.current.muted = true;
+              setIsMuted(true);
               setVolume(0);
               videoRef.current.play()
                 .then(() => {
                   setIsPlaying(true);
-                  showAction(<VolumeX size={32} />, 'Muted Autoplay (Click to Unmute)');
+                  showAction(<VolumeX size={32} />, 'Muted Autoplay (Tap to Unmute)');
                 })
-                .catch((e) => console.log('Muted autoplay also blocked:', e));
+                .catch(() => {});
             }
-          } else {
-            console.log('Autoplay error:', error);
           }
         });
     }
   };
 
+  useEffect(() => {
+    return () => {
+      clearTimeout(controlsTimeoutRef.current);
+      clearTimeout(indicatorTimeoutRef.current);
+    };
+  }, []);
+
   const togglePlay = () => {
     if (!videoRef.current) return;
     if (videoRef.current.muted) {
       videoRef.current.muted = false;
+      setIsMuted(false);
       setVolume(1);
       videoRef.current.volume = 1;
       showAction(<Volume2 size={32} />, 'Unmuted (100%)');
       return;
     }
     if (videoRef.current.paused && !isBlocked) {
-      const playPromise = videoRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise.then(() => {
-          setIsPlaying(true);
-          showAction(<Play size={32} />, 'Play');
-        }).catch(error => {
-          console.log("Playback interrupted by player switch:", error);
-        });
-      }
+      videoRef.current.play().then(() => {
+        setIsPlaying(true);
+        showAction(<Play size={32} />, 'Play');
+      }).catch(err => {
+        console.log('Playback error:', err);
+      });
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
@@ -171,16 +293,24 @@ export default function VideoPlayer({
     if (!videoRef.current) return;
     videoRef.current.currentTime += amount;
     if (amount > 0) {
-      showAction(<FastForward size={32} />, '+10s');
+      showAction(<RotateCw size={32} />, `+${amount}s`);
     } else {
-      showAction(<Rewind size={32} />, '-10s');
+      showAction(<RotateCcw size={32} />, `${amount}s`);
     }
+  };
+
+  const rotateVideo = () => {
+    const nextAngle = (rotationAngle + 90) % 360;
+    setRotationAngle(nextAngle);
+    showAction(<Rotate3d size={32} />, `Rotated ${nextAngle}°`);
   };
 
   const adjustVolume = (amount) => {
     if (!videoRef.current) return;
     let newVolume = Math.min(Math.max(videoRef.current.volume + amount, 0), 1);
     videoRef.current.volume = newVolume;
+    videoRef.current.muted = newVolume === 0;
+    setIsMuted(newVolume === 0);
     setVolume(newVolume);
     if (newVolume === 0) {
       showAction(<VolumeX size={32} />, 'Muted');
@@ -192,7 +322,6 @@ export default function VideoPlayer({
   // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Don't trigger if user is typing in an input
       if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
 
       switch(e.key) {
@@ -229,16 +358,25 @@ export default function VideoPlayer({
           e.stopPropagation();
           toggleFullscreen();
           break;
+        case 'r':
+          e.preventDefault();
+          e.stopPropagation();
+          rotateVideo();
+          break;
         case 'm':
           e.preventDefault();
           e.stopPropagation();
-          if (volume > 0) {
+          if (volume > 0 && !isMuted) {
+            setIsMuted(true);
             setVolume(0);
             videoRef.current.volume = 0;
+            videoRef.current.muted = true;
             showAction(<VolumeX size={32} />, 'Muted');
           } else {
+            setIsMuted(false);
             setVolume(1);
             videoRef.current.volume = 1;
+            videoRef.current.muted = false;
             showAction(<Volume2 size={32} />, '100%');
           }
           break;
@@ -249,14 +387,28 @@ export default function VideoPlayer({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [volume]);
+  }, [volume, isMuted, rotationAngle]);
 
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
     const current = videoRef.current.currentTime;
     const duration = videoRef.current.duration;
     if (duration > 0) {
-      setProgress((current / duration) * 100);
+      const currentPercent = (current / duration) * 100;
+      setProgress(currentPercent);
+
+      // Trigger pre-fetch when reaching 70% or less than 30s remaining
+      if (nextVideoId && (currentPercent >= 70 || (duration - current) <= 30)) {
+        prefetchNextVideo(nextVideoId);
+      }
+    }
+
+    // Update buffer progress
+    if (videoRef.current.buffered && videoRef.current.buffered.length > 0 && duration > 0) {
+      try {
+        const bufferedEnd = videoRef.current.buffered.end(videoRef.current.buffered.length - 1);
+        setBufferedProgress((bufferedEnd / duration) * 100);
+      } catch (e) {}
     }
 
     // Paywall Time Tracking
@@ -278,75 +430,40 @@ export default function VideoPlayer({
 
   const handleLoadedMetadata = () => {
     if (!videoRef.current) return;
-    
-    // First try database initialTime, fallback to local storage
     let pos = initialTime;
     if (!pos && driveFileId) {
       const savedPos = localStorage.getItem(`pos_${driveFileId}`);
       if (savedPos && !isNaN(savedPos)) pos = parseFloat(savedPos);
     }
 
-    if (pos > 0) {
-      // Only resume if we are not at the very end
-      if (pos < videoRef.current.duration - 5) {
-        videoRef.current.currentTime = pos;
-        showAction(null, `Resuming from ${formatTime(pos)}`);
-      }
+    if (pos > 0 && pos < videoRef.current.duration - 5) {
+      videoRef.current.currentTime = pos;
+      showAction(null, `Resuming from ${formatTime(pos)}`);
     }
   };
 
-  // Periodic save of position
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      if (videoRef.current && !videoRef.current.paused) {
-        const currentTime = videoRef.current.currentTime;
-        
-        // 1. Local fallback save
-        if (driveFileId) {
-          localStorage.setItem(`pos_${driveFileId}`, currentTime);
-        }
-
-        // 2. Database save
-        const token = localStorage.getItem('token');
-        if (token && videoId) {
-          try {
-            await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/history`, {
-              method: 'POST',
-              headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify({ videoId, timestamp: currentTime })
-            });
-          } catch(err) {
-            console.error('Failed to sync history', err);
-          }
-        }
-      }
-    }, 10000); // Save every 10 seconds to avoid spamming the DB
-    
-    return () => clearInterval(interval);
-  }, [driveFileId, videoId]);
-
-  const handleEnded = () => {
-    if (driveFileId) {
-      localStorage.removeItem(`pos_${driveFileId}`);
-    }
-    if (onNext) {
-      showAction(<SkipForward size={32} />, 'Auto-playing next...');
-      setTimeout(() => {
-        onNext();
-      }, 2000);
-    }
+  // Progress Bar Seek & Hover Preview
+  const handleProgressBarMouseMove = (e) => {
+    if (!progressBarRef.current || !videoRef.current || !videoRef.current.duration) return;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const percent = (x / rect.width) * 100;
+    const time = (percent / 100) * videoRef.current.duration;
+    setHoverPosition({ percent, time, x });
   };
 
-  const handleProgressChange = (e) => {
-    const newProgress = e.target.value;
-    const duration = videoRef.current.duration;
-    if (duration) {
-      videoRef.current.currentTime = (newProgress / 100) * duration;
-      setProgress(newProgress);
-    }
+  const handleProgressBarMouseLeave = () => {
+    setHoverPosition(null);
+  };
+
+  const handleProgressClick = (e) => {
+    if (!progressBarRef.current || !videoRef.current || !videoRef.current.duration) return;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const percent = (x / rect.width) * 100;
+    const newTime = (percent / 100) * videoRef.current.duration;
+    videoRef.current.currentTime = newTime;
+    setProgress(percent);
   };
 
   const toggleFullscreen = () => {
@@ -355,11 +472,15 @@ export default function VideoPlayer({
     if (!document.fullscreenElement) {
       if (containerRef.current.requestFullscreen) {
         containerRef.current.requestFullscreen();
+      } else if (containerRef.current.webkitRequestFullscreen) {
+        containerRef.current.webkitRequestFullscreen();
       }
       setIsFullscreen(true);
     } else {
       if (document.exitFullscreen) {
         document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
       }
       setIsFullscreen(false);
     }
@@ -369,89 +490,53 @@ export default function VideoPlayer({
     setShowControls(true);
     clearTimeout(controlsTimeoutRef.current);
     controlsTimeoutRef.current = setTimeout(() => {
-      if (isPlaying && !showSettings) setShowControls(false);
-    }, 3000);
+      if (isPlaying && !showSettings && !showTracksMenu) setShowControls(false);
+    }, 3500);
   };
 
   const handleMouseLeave = () => {
-    if (isPlaying && !showSettings) setShowControls(false);
+    if (isPlaying && !showSettings && !showTracksMenu) setShowControls(false);
   };
 
   const changePlaybackRate = (rate) => {
-    videoRef.current.playbackRate = rate;
+    if (videoRef.current) videoRef.current.playbackRate = rate;
     setPlaybackRate(rate);
     setShowSettings(false);
     showAction(null, `${rate}x Speed`);
   };
 
   const changeQuality = (q) => {
-    const currentTime = videoRef.current ? videoRef.current.currentTime : 0;
-    const isPaused = videoRef.current ? videoRef.current.paused : true;
-    
     setQuality(q);
     setShowSettings(false);
-    showAction(null, q === 'auto' ? 'Auto Quality' : `${q}p`);
-    
-    // We need to restore playback position after source changes
-    setTimeout(() => {
-      if (videoRef.current) {
-        videoRef.current.currentTime = currentTime;
-        if (!isPaused) {
-          videoRef.current.play().catch(e => console.error(e));
-        }
+    if (hlsRef.current && hlsRef.current.levels) {
+      if (q === 'auto') {
+        hlsRef.current.currentLevel = -1;
+      } else {
+        const targetH = parseInt(q, 10);
+        const idx = hlsRef.current.levels.findIndex(lvl => lvl.height === targetH);
+        if (idx !== -1) hlsRef.current.currentLevel = idx;
       }
-    }, 100);
+    }
+    showAction(null, q === '360' ? '360p (Low)' : `${q}p`);
   };
-
-
-  if (!videoSrc) return <div className="video-placeholder glass">No video source provided</div>;
-  
-  if (useIframe && driveFileId) {
-    return (
-      <div className="video-container iframe-mode" style={{ aspectRatio: '16/9', background: '#000' }}>
-        <iframe
-          src={`https://drive.google.com/file/d/${driveFileId}/preview`}
-          width="100%"
-          height="100%"
-          allow="autoplay; fullscreen"
-          className="main-video"
-          style={{ border: 'none' }}
-        ></iframe>
-      </div>
-    );
-  }
 
   return (
     <div 
       ref={containerRef}
-      className={`video-container ${isFullscreen ? 'fullscreen' : ''}`} 
+      className={`video-container ${isFullscreen ? 'fullscreen' : ''} ${rotationAngle === 90 || rotationAngle === 270 ? 'rotated-vertical' : ''}`} 
       onMouseMove={handleMouseMove}
+      onTouchStart={() => setShowControls(true)}
       onMouseLeave={handleMouseLeave}
-      onClick={() => showSettings && setShowSettings(false)}
+      onClick={() => {
+        if (showSettings) setShowSettings(false);
+        if (showTracksMenu) setShowTracksMenu(false);
+      }}
       tabIndex={0}
       style={{ outline: 'none' }}
     >
       {/* Remaining Time Badge */}
       {!isAdmin && localRemaining !== null && (
-        <div className="remaining-badge" style={{
-          position: 'absolute',
-          top: '20px',
-          right: '20px',
-          background: localRemaining <= 60 ? 'rgba(239, 68, 68, 0.9)' : 'rgba(0, 0, 0, 0.6)',
-          color: 'white',
-          padding: '8px 16px',
-          borderRadius: '20px',
-          fontSize: '0.9rem',
-          fontWeight: '600',
-          backdropFilter: 'blur(4px)',
-          zIndex: 10,
-          transition: 'all 0.3s ease',
-          border: localRemaining <= 60 ? '1px solid rgba(255, 255, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-          opacity: showControls || localRemaining <= 60 ? 1 : 0,
-          transform: showControls || localRemaining <= 60 ? 'translateY(0)' : 'translateY(-10px)',
-          pointerEvents: 'none'
-        }}>
+        <div className="remaining-badge">
           <span style={{ marginRight: '6px' }}>⏱️</span>
           Free Preview: {formatRemaining(localRemaining)}
         </div>
@@ -475,61 +560,149 @@ export default function VideoPlayer({
         </div>
       )}
 
+      {/* Big Center Play / Pause Button */}
+      {!isLoading && (
+        <div 
+          className={`center-play-overlay ${!isPlaying || showControls ? 'visible' : ''}`}
+          onClick={togglePlay}
+        >
+          <button 
+            type="button" 
+            className="center-play-btn"
+            aria-label={isPlaying ? "Pause" : "Play"}
+          >
+            {isPlaying ? <Pause size={38} /> : <Play size={38} style={{ marginLeft: '4px' }} />}
+          </button>
+        </div>
+      )}
+
+      {/* Quick 10s Rewind / FastForward */}
+      <div className={`quick-skip-controls ${showControls ? 'visible' : ''}`}>
+        <button 
+          type="button" 
+          onClick={(e) => { e.stopPropagation(); skip(-10); }} 
+          className="quick-skip-btn"
+          title="Backward 10 seconds"
+        >
+          <RotateCcw size={24} />
+          <span>10s</span>
+        </button>
+
+        <button 
+          type="button" 
+          onClick={(e) => { e.stopPropagation(); skip(10); }} 
+          className="quick-skip-btn"
+          title="Forward 10 seconds"
+        >
+          <RotateCw size={24} />
+          <span>10s</span>
+        </button>
+      </div>
+
       <video
         ref={videoRef}
-        src={videoSrc}
         poster={poster}
         autoPlay
         playsInline
-        className="main-video"
+        className={`main-video angle-${rotationAngle}`}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
-        onClick={togglePlay}
         onWaiting={() => setIsLoading(true)}
         onPlaying={() => { setIsLoading(false); setIsPlaying(true); }}
-        onCanPlay={() => {
-          setIsLoading(false);
-          if (!hasAttemptedAutoplay.current && !isBlocked) {
-            hasAttemptedAutoplay.current = true;
-            attemptAutoplay();
-          }
-        }}
         onPause={() => setIsPlaying(false)}
-        onEnded={handleEnded}
         preload="auto"
         controlsList="nodownload"
         crossOrigin="anonymous"
-      />
-
-      {/* Controls Overlay */}
-      <div className={`video-controls glass ${showControls ? 'visible' : 'hidden'}`}>
-        <div className="progress-bar-container">
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="0.1"
-            value={progress}
-            onChange={handleProgressChange}
-            className="progress-bar"
-            style={{ '--progress': `${progress}%` }}
+      >
+        {subtitleTracks.map((sub, idx) => (
+          <track 
+            key={`track-${sub.language || idx}`}
+            kind="subtitles" 
+            src={sub.url.startsWith('http') ? sub.url : `${backendUrl}${sub.url}`} 
+            srcLang={sub.language || 'en'} 
+            label={sub.name || sub.title || 'Subtitle'} 
+            default={currentSubtitleTrack === idx} 
           />
+        ))}
+      </video>
+
+      {/* Bottom Controls Overlay */}
+      <div className={`video-controls glass ${showControls ? 'visible' : 'hidden'}`}>
+        <div 
+          ref={progressBarRef}
+          className="progress-bar-container"
+          onMouseMove={handleProgressBarMouseMove}
+          onMouseLeave={handleProgressBarMouseLeave}
+          onClick={handleProgressClick}
+        >
+          <div className="progress-bar-track">
+            <div 
+              className="progress-bar-buffered" 
+              style={{ width: `${bufferedProgress}%` }} 
+            />
+            <div 
+              className="progress-bar-fill" 
+              style={{ width: `${progress}%` }} 
+            />
+            <div 
+              className="progress-bar-thumb" 
+              style={{ left: `${progress}%` }} 
+            />
+          </div>
+
+          {hoverPosition && (
+            <div 
+              className="progress-hover-tooltip"
+              style={{ left: `${hoverPosition.x}px` }}
+            >
+              {formatTime(hoverPosition.time)}
+            </div>
+          )}
         </div>
 
         <div className="controls-row">
           <div className="left-controls">
-            <button onClick={togglePlay} className="control-btn icon-btn">
-              {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+            <button 
+              type="button" 
+              onClick={togglePlay} 
+              className="control-btn icon-btn" 
+              title={isPlaying ? "Pause (k)" : "Play (k)"}
+            >
+              {isPlaying ? <Pause size={22} /> : <Play size={22} />}
+            </button>
+
+            <button 
+              type="button" 
+              onClick={() => skip(-10)} 
+              className="control-btn icon-btn" 
+              title="Backward 10s (j)"
+            >
+              <RotateCcw size={20} />
+            </button>
+
+            <button 
+              type="button" 
+              onClick={() => skip(10)} 
+              className="control-btn icon-btn" 
+              title="Forward 10s (l)"
+            >
+              <RotateCw size={20} />
             </button>
 
             {onPrev && (
-              <button onClick={onPrev} className="control-btn icon-btn" title="Previous Episode">
+              <button type="button" onClick={onPrev} className="control-btn icon-btn" title="Previous Episode">
                 <SkipBack size={20} />
               </button>
             )}
 
             {onNext && (
-              <button onClick={onNext} className="control-btn icon-btn" title="Next Episode">
+              <button 
+                type="button" 
+                onClick={onNext} 
+                onMouseEnter={() => nextVideoId && prefetchNextVideo(nextVideoId)}
+                className="control-btn icon-btn" 
+                title="Next Episode"
+              >
                 <SkipForward size={20} />
               </button>
             )}
@@ -540,42 +713,116 @@ export default function VideoPlayer({
             </div>
 
             <div className="volume-control">
-              <button onClick={() => adjustVolume(volume > 0 ? -volume : 1)} className="control-btn icon-btn">
-                {volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
+              <button 
+                type="button" 
+                onClick={() => adjustVolume(volume > 0 && !isMuted ? -volume : 1)} 
+                className="control-btn icon-btn"
+                title={isMuted || volume === 0 ? "Unmute (m)" : "Mute (m)"}
+              >
+                {isMuted || volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
               </button>
               <input
                 type="range"
                 min="0"
                 max="1"
                 step="0.05"
-                value={volume}
-                onChange={(e) => adjustVolume(e.target.value - volume)}
+                value={isMuted ? 0 : volume}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setVolume(val);
+                  setIsMuted(val === 0);
+                  if (videoRef.current) {
+                    videoRef.current.volume = val;
+                    videoRef.current.muted = val === 0;
+                  }
+                }}
                 className="volume-slider"
-                style={{ '--volume': `${volume * 100}%` }}
+                style={{ '--volume': `${(isMuted ? 0 : volume) * 100}%` }}
+                aria-label="Volume"
               />
             </div>
           </div>
 
           <div className="right-controls">
+            {/* Multi-Audio & Subtitles Track Selection */}
+            {true && (
+              <div className="settings-container">
+                <button 
+                  type="button" 
+                  onClick={(e) => { e.stopPropagation(); setShowTracksMenu(!showTracksMenu); setShowSettings(false); }}
+                  className="control-btn icon-btn" 
+                  title="Audio & Subtitles"
+                >
+                  <Languages size={20} />
+                </button>
+
+                {showTracksMenu && (
+                  <div className="settings-menu glass" onClick={(e) => e.stopPropagation()} style={{ minWidth: '180px' }}>
+                    {audioTracks.length > 0 && (
+                      <>
+                        <div className="settings-header">Audio Language</div>
+                        {audioTracks.map((track, i) => (
+                          <button
+                            type="button"
+                            key={`audio-${i}`}
+                            className={`settings-option ${currentAudioTrack === i ? 'active' : ''}`}
+                            onClick={() => selectAudioTrack(i)}
+                          >
+                            {track.name || track.lang || `Audio ${i + 1}`}
+                          </button>
+                        ))}
+                      </>
+                    )}
+
+                    {subtitleTracks.length > 0 && (
+                      <>
+                        <div className="settings-header" style={{ marginTop: '0.5rem' }}>Subtitles</div>
+                        <button
+                          type="button"
+                          className={`settings-option ${currentSubtitleTrack === -1 ? 'active' : ''}`}
+                          onClick={() => selectSubtitleTrack(-1)}
+                        >
+                          Off
+                        </button>
+                        {subtitleTracks.map((sub, i) => (
+                          <button
+                            type="button"
+                            key={`sub-${i}`}
+                            className={`settings-option ${currentSubtitleTrack === i ? 'active' : ''}`}
+                            onClick={() => selectSubtitleTrack(i)}
+                          >
+                            {sub.name || sub.lang || `Subtitle ${i + 1}`}
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Rotate Video Button */}
+            <button 
+              type="button" 
+              onClick={rotateVideo} 
+              className="control-btn icon-btn" 
+              title="Rotate Screen (r)"
+            >
+              <Rotate3d size={20} />
+            </button>
+
+            {/* Playback Settings Menu */}
             <div className="settings-container">
               <button 
+                type="button" 
                 className="control-btn icon-btn" 
-                onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); }}
+                onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); setShowTracksMenu(false); }}
+                title="Settings"
               >
                 <div style={{ position: 'relative' }}>
                   <Settings size={20} className={showSettings ? 'spin' : ''} />
                   {(quality === '1080' || quality === '720') && (
-                    <span style={{
-                      position: 'absolute',
-                      top: '-8px',
-                      right: '-8px',
-                      fontSize: '8px',
-                      background: 'var(--primary)',
-                      color: 'white',
-                      padding: '2px 4px',
-                      borderRadius: '4px',
-                      fontWeight: '800'
-                    }}>HD</span>
+                    <span className="hd-tag">HD</span>
                   )}
                 </div>
               </button>
@@ -586,6 +833,7 @@ export default function VideoPlayer({
                   <div className="settings-options-grid">
                     {[0.5, 0.75, 1, 1.25, 1.5, 2].map(rate => (
                       <button 
+                        type="button"
                         key={`speed-${rate}`} 
                         className={`settings-option ${playbackRate === rate ? 'active' : ''}`}
                         onClick={() => changePlaybackRate(rate)}
@@ -597,13 +845,14 @@ export default function VideoPlayer({
 
                   <div className="settings-header" style={{marginTop: '0.5rem'}}>Quality</div>
                   <div className="settings-options-grid">
-                    {['auto', '1080', '720', '480'].map(q => (
+                    {['360', '480', '720', '1080'].map(q => (
                       <button 
+                        type="button"
                         key={`quality-${q}`} 
                         className={`settings-option ${quality === q ? 'active' : ''}`}
                         onClick={() => changeQuality(q)}
                       >
-                        {q === 'auto' ? 'Auto (Best)' : `${q}p`}
+                        {q === '360' ? '360p (Low)' : `${q}p`}
                       </button>
                     ))}
                   </div>
@@ -611,7 +860,13 @@ export default function VideoPlayer({
               )}
             </div>
 
-            <button onClick={toggleFullscreen} className="control-btn icon-btn">
+            {/* Fullscreen Toggle */}
+            <button 
+              type="button" 
+              onClick={toggleFullscreen} 
+              className="control-btn icon-btn"
+              title="Fullscreen (f)"
+            >
               {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
             </button>
           </div>

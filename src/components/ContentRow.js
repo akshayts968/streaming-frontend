@@ -2,6 +2,7 @@
 
 import { useRef } from 'react';
 import Link from 'next/link';
+import { prefetchNextVideo } from '@/utils/useVideoPrefetch';
 import '@/styles/ContentRow.css';
 
 export default function ContentRow({ title, videos = [] }) {
@@ -32,7 +33,7 @@ export default function ContentRow({ title, videos = [] }) {
         
         <div className="content-row" ref={rowRef}>
           {videos.map((video) => (
-            <div key={video._id} className="video-card">
+            <div key={video._id} className="video-card" onMouseEnter={() => prefetchNextVideo(video.drive_file_id || video._id)}>
               <Link href={video.isSeries ? `/series/${video.slug || video._id}` : `/watch/${video.slug || video._id}`}>
                 <div className="thumbnail-wrapper">
                   <img 
