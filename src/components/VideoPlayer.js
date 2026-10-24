@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Hls from 'hls.js';
 import { prefetchNextVideo } from '@/utils/useVideoPrefetch';
+import VideoSeekPreview from './VideoSeekPreview';
 import '@/styles/VideoPlayer.css';
 
 export default function VideoPlayer({ 
@@ -651,12 +652,14 @@ export default function VideoPlayer({
           </div>
 
           {hoverPosition && (
-            <div 
-              className="progress-hover-tooltip"
-              style={{ left: `${hoverPosition.x}px` }}
-            >
-              {formatTime(hoverPosition.time)}
-            </div>
+            <VideoSeekPreview 
+              videoId={targetId}
+              hoverTime={hoverPosition.time}
+              hoverX={hoverPosition.x}
+              containerWidth={progressBarRef.current ? progressBarRef.current.clientWidth : 0}
+              formatTime={formatTime}
+              backendUrl={backendUrl}
+            />
           )}
         </div>
 
