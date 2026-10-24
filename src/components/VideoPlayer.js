@@ -608,10 +608,11 @@ export default function VideoPlayer({
         className={`main-video angle-${rotationAngle}`}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
+        onCanPlay={() => setIsLoading(false)}
         onWaiting={() => setIsLoading(true)}
         onPlaying={() => { setIsLoading(false); setIsPlaying(true); }}
         onPause={() => setIsPlaying(false)}
-        preload="auto"
+        preload="metadata"
         controlsList="nodownload"
         crossOrigin="anonymous"
       >
