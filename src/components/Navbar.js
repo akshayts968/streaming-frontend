@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { formatMediaUrl } from '@/utils/media';
 import '@/styles/Navbar.css';
 
 export default function Navbar() {
@@ -76,7 +77,7 @@ export default function Navbar() {
                   className="searchItem" 
                   onClick={() => setSearchQuery('')}
                 >
-                  <img src={item.thumbnailUrl} alt="" className="searchThumb" />
+                  <img src={formatMediaUrl(item.thumbnailUrl)} alt="" className="searchThumb" />
                   <div className="searchInfo">
                     <span className="searchTitle">{item.title}</span>
                     <span className="searchMeta">

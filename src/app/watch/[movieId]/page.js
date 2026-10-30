@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import VideoPlayer from '@/components/VideoPlayer';
+import { formatMediaUrl } from '@/utils/media';
 import ContentRow from '@/components/ContentRow';
 import '@/styles/Watch.css';
 
@@ -241,7 +242,7 @@ export default function WatchPage({ params: paramsPromise }) {
           initialTime={initialTime}
           driveFileId={movieData.drive_file_id} 
           src={movieData.videoUrl} 
-          poster={movieData.thumbnailUrl} 
+          poster={formatMediaUrl(movieData.thumbnailUrl)} 
           useIframe={false}
           onWatchTime={handleWatchTime}
           isBlocked={isBlocked}

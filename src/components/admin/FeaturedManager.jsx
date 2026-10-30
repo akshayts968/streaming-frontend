@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { formatMediaUrl } from '@/utils/media';
 
 export default function FeaturedManager() {
   const [featuredList, setFeaturedList] = useState([]);
@@ -381,7 +382,7 @@ export default function FeaturedManager() {
               }}>
                 {item.bannerUrl ? (
                   <img
-                    src={item.bannerUrl}
+                    src={formatMediaUrl(item.bannerUrl)}
                     alt={item.title}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     onError={(e) => { e.target.style.display = 'none'; }}

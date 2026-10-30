@@ -5,6 +5,7 @@ import Link from 'next/link';
 import ContentRow from '@/components/ContentRow';
 import '@/styles/Home.css';
 import HeroCarousel from '@/components/HeroCarousel';
+import { formatMediaUrl } from '@/utils/media';
 
 const HERO_SLIDES = [
   {
@@ -195,8 +196,8 @@ export default function Home() {
             subBadge: `${v.views || 0} views`,
             meta: `${v.category || 'Video'} • ${formatDurationAsHHMM(v.duration)}`,
             description: v.description || 'Watch now on our streaming platform.',
-            bgImage: v.thumbnailUrl,
-            thumbImage: v.thumbnailUrl,
+            bgImage: formatMediaUrl(v.thumbnailUrl),
+            thumbImage: formatMediaUrl(v.thumbnailUrl),
             videoId: v._id,
             slug: v.slug
           }));

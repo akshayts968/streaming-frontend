@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { formatMediaUrl } from '@/utils/media';
 
 export default function HeroCarousel() {
   const [slides, setSlides] = useState([]);
@@ -87,7 +88,7 @@ export default function HeroCarousel() {
               left: 0,
               right: 0,
               bottom: 0,
-              backgroundImage: `url('${slide.bannerUrl}')`,
+              backgroundImage: `url('${formatMediaUrl(slide.bannerUrl)}')`,
               backgroundSize: 'cover',
               backgroundPosition: 'center top',
               backgroundRepeat: 'no-repeat',

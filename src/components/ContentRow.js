@@ -3,6 +3,7 @@
 import { useRef } from 'react';
 import Link from 'next/link';
 import { prefetchNextVideo } from '@/utils/useVideoPrefetch';
+import { formatMediaUrl } from '@/utils/media';
 import '@/styles/ContentRow.css';
 
 export default function ContentRow({ title, videos = [] }) {
@@ -37,7 +38,7 @@ export default function ContentRow({ title, videos = [] }) {
               <Link href={video.isSeries ? `/series/${video.slug || video._id}` : `/watch/${video.slug || video._id}`}>
                 <div className="thumbnail-wrapper">
                   <img 
-                    src={video.thumbnailUrl || '/no-thumbnail.jpg'} 
+                    src={formatMediaUrl(video.thumbnailUrl)} 
                     alt={video.title} 
                     className="thumbnail"
                   />
