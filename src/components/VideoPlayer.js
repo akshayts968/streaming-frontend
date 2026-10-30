@@ -318,9 +318,12 @@ export default function VideoPlayer({
 
     const sub = subtitleTracks[index];
     if (sub && sub.url) {
-      const fetchUrl = sub.url.startsWith('http') || sub.url.startsWith('blob:')
+      const baseFetchUrl = sub.url.startsWith('http') || sub.url.startsWith('blob:')
         ? sub.url 
         : `${backendUrl}${sub.url}`;
+      const fetchUrl = baseFetchUrl.startsWith('blob:') 
+        ? baseFetchUrl 
+        : `${baseFetchUrl}${baseFetchUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
       
       fetch(fetchUrl)
         .then(r => r.text())
