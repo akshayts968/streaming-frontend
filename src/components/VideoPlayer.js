@@ -135,6 +135,13 @@ export default function VideoPlayer({
             enableWorker: true,
             lowLatencyMode: true,
             backBufferLength: 90,
+            xhrSetup: (xhr) => {
+              const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+              if (token) {
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+              }
+              xhr.withCredentials = true;
+            }
           });
           hlsRef.current = hls;
           hls.loadSource(hlsUrl);
