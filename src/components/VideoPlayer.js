@@ -11,6 +11,51 @@ import { prefetchNextVideo } from '@/utils/useVideoPrefetch';
 import VideoSeekPreview from './VideoSeekPreview';
 import '@/styles/VideoPlayer.css';
 
+
+/**
+ * Robust WebVTT subtitle cue parser
+ */
+const parseWebVTT = (vttText) => {
+  const cues = [];
+  const lines = vttText.replace(/\r\n|\r/g, '\n').split('\n');
+  let i = 0;
+
+  const parseTimestamp = (tStr) => {
+    if (!tStr) return 0;
+    const parts = tStr.trim().split(':');
+    if (parts.length === 3) {
+      const [h, m, s] = parts;
+      return parseFloat(h) * 3600 + parseFloat(m) * 60 + parseFloat(s);
+    } else if (parts.length === 2) {
+      const [m, s] = parts;
+      return parseFloat(m) * 60 + parseFloat(s);
+    }
+    return 0;
+  };
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (line.includes('-->')) {
+      const parts = line.split('-->');
+      const start = parseTimestamp(parts[0]?.split(' ')[0]);
+      const end = parseTimestamp(parts[1]?.trim()?.split(' ')[0]);
+      i++;
+      const textLines = [];
+      while (i < lines.length && lines[i].trim() !== '') {
+        // Strip out cue tags like <v ...> or <b>
+        textLines.push(lines[i].trim().replace(/<[^>]*>/g, ''));
+        i++;
+      }
+      if (textLines.length > 0) {
+        cues.push({ start, end, text: textLines.join('\n') });
+      }
+    } else {
+      i++;
+    }
+  }
+  return cues;
+};
+
 export default function VideoPlayer({ 
   videoId, initialTime = 0, driveFileId, src, poster, useIframe = false, onWatchTime, 
   isBlocked, remainingTime, isAdmin, onNext, onPrev, nextVideoId 
@@ -39,6 +84,8 @@ export default function VideoPlayer({
   const [currentAudioTrack, setCurrentAudioTrack] = useState(-1);
   const [subtitleTracks, setSubtitleTracks] = useState([]);
   const [currentSubtitleTrack, setCurrentSubtitleTrack] = useState(-1);
+  const [activeSubtitleText, setActiveSubtitleText] = useState('');
+  const currentCuesRef = useRef([]);
   const [showTracksMenu, setShowTracksMenu] = useState(false);
   const [showAudioMenu, setShowAudioMenu] = useState(false);
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
@@ -256,13 +303,43 @@ export default function VideoPlayer({
     if (hlsRef.current) {
       hlsRef.current.subtitleTrack = index;
     }
-    // Update HTML5 video textTracks directly for progressive MP4 stream fallback
+
+    if (index === -1) {
+      currentCuesRef.current = [];
+      setActiveSubtitleText('');
+      if (videoRef.current && videoRef.current.textTracks) {
+        for (let i = 0; i < videoRef.current.textTracks.length; i++) {
+          videoRef.current.textTracks[i].mode = 'disabled';
+        }
+      }
+      showAction(<Subtitles size={32} />, 'Subtitles: Off');
+      return;
+    }
+
+    const sub = subtitleTracks[index];
+    if (sub && sub.url) {
+      const fetchUrl = sub.url.startsWith('http') || sub.url.startsWith('blob:')
+        ? sub.url 
+        : `${backendUrl}${sub.url}`;
+      
+      fetch(fetchUrl)
+        .then(r => r.text())
+        .then(text => {
+          currentCuesRef.current = parseWebVTT(text);
+          const cur = videoRef.current ? videoRef.current.currentTime : 0;
+          const match = currentCuesRef.current.find(c => cur >= c.start && cur <= c.end);
+          setActiveSubtitleText(match ? match.text : '');
+        })
+        .catch(err => console.warn('Failed to load subtitle cues:', err.message));
+    }
+
     if (videoRef.current && videoRef.current.textTracks) {
       for (let i = 0; i < videoRef.current.textTracks.length; i++) {
         videoRef.current.textTracks[i].mode = (i === index) ? 'showing' : 'disabled';
       }
     }
-    const name = index === -1 ? 'Off' : (subtitleTracks[index]?.name || `Subtitle ${index + 1}`);
+
+    const name = sub?.name || sub?.title || sub?.lang || `Subtitle ${index + 1}`;
     showAction(<Subtitles size={32} />, `Subtitles: ${name}`);
   };
 
@@ -446,6 +523,15 @@ export default function VideoPlayer({
     if (!videoRef.current) return;
     const current = videoRef.current.currentTime;
     const duration = videoRef.current.duration;
+
+    // Update active subtitle cue text for on-screen display
+    if (currentCuesRef.current && currentCuesRef.current.length > 0) {
+      const match = currentCuesRef.current.find(c => current >= c.start && current <= c.end);
+      const cueText = match ? match.text : '';
+      setActiveSubtitleText(cueText);
+    } else if (activeSubtitleText) {
+      setActiveSubtitleText('');
+    }
     if (duration > 0) {
       const currentPercent = (current / duration) * 100;
       setProgress(currentPercent);
@@ -682,6 +768,42 @@ export default function VideoPlayer({
           />
         ))}
       </video>
+
+      {/* High-visibility Netflix-style Subtitle Overlay */}
+      {activeSubtitleText && (
+        <div 
+          className="custom-subtitle-overlay"
+          style={{
+            position: 'absolute',
+            bottom: showControls ? '90px' : '40px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            textAlign: 'center',
+            pointerEvents: 'none',
+            zIndex: 25,
+            maxWidth: '85%',
+            transition: 'bottom 0.25s ease'
+          }}
+        >
+          <span 
+            style={{
+              display: 'inline-block',
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              color: '#ffffff',
+              fontSize: 'clamp(1rem, 2.2vw, 1.45rem)',
+              fontWeight: '600',
+              lineHeight: '1.4',
+              padding: '4px 14px',
+              borderRadius: '4px',
+              textShadow: '0 2px 4px rgba(0, 0, 0, 0.9), 0 0 2px #000',
+              whiteSpace: 'pre-line',
+              letterSpacing: '0.3px'
+            }}
+          >
+            {activeSubtitleText}
+          </span>
+        </div>
+      )}
 
       {/* Bottom Controls Overlay */}
       <div className={`video-controls glass ${showControls ? 'visible' : 'hidden'}`}>
