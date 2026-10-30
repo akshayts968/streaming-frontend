@@ -325,15 +325,30 @@ export default function VideoPlayer({
         ? baseFetchUrl 
         : `${baseFetchUrl}${baseFetchUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
       
+      const subName = sub?.name || sub?.title || sub?.lang || 'Subtitles';
+      const greeting = sub?.lang === 'ml' ? `[സബ്‌ടൈറ്റിലുകൾ: ${subName}]` : `[Subtitles: ${subName}]`;
+      setActiveSubtitleText(greeting);
+
       fetch(fetchUrl)
         .then(r => r.text())
         .then(text => {
-          currentCuesRef.current = parseWebVTT(text);
+          const parsed = parseWebVTT(text);
+          currentCuesRef.current = parsed;
           const cur = videoRef.current ? videoRef.current.currentTime : 0;
-          const match = currentCuesRef.current.find(c => cur >= c.start && cur <= c.end);
-          setActiveSubtitleText(match ? match.text : '');
+          const match = parsed.find(c => cur >= c.start && cur <= c.end);
+          if (match) {
+            setActiveSubtitleText(match.text);
+          } else {
+            // Keep confirmation badge on screen for 2.5s if current video position has no active cue
+            setTimeout(() => {
+              setActiveSubtitleText(prev => (prev === greeting ? '' : prev));
+            }, 2500);
+          }
         })
-        .catch(err => console.warn('Failed to load subtitle cues:', err.message));
+        .catch(err => {
+          console.warn('Failed to load subtitle cues:', err.message);
+          setTimeout(() => setActiveSubtitleText(''), 2500);
+        });
     }
 
     if (videoRef.current && videoRef.current.textTracks) {
@@ -531,8 +546,8 @@ export default function VideoPlayer({
     if (currentCuesRef.current && currentCuesRef.current.length > 0) {
       const match = currentCuesRef.current.find(c => current >= c.start && current <= c.end);
       const cueText = match ? match.text : '';
-      setActiveSubtitleText(cueText);
-    } else if (activeSubtitleText) {
+      setActiveSubtitleText(prev => (cueText ? cueText : (prev.startsWith('[') && prev.endsWith(']') ? prev : '')));
+    } else if (activeSubtitleText && !activeSubtitleText.startsWith('[')) {
       setActiveSubtitleText('');
     }
     if (duration > 0) {
