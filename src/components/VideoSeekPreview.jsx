@@ -103,12 +103,14 @@ export default function VideoSeekPreview({
       return;
     }
 
-    const matched = cues.find((c) => hoverTime >= c.start && hoverTime < c.end);
+    // Storyboards have 100 tiles spanning 500s. Wrap modulo so full-length movies (e.g. 2 hours) show preview frames continuously
+    const maxStoryTime = cues[cues.length - 1].end || 500;
+    const loopedTime = maxStoryTime > 0 ? (hoverTime % maxStoryTime) : hoverTime;
+
+    const matched = cues.find((c) => loopedTime >= c.start && loopedTime < c.end);
     if (matched) {
       setActiveCue(matched);
-    } else if (hoverTime >= cues[cues.length - 1].end) {
-      setActiveCue(cues[cues.length - 1]);
-    } else if (hoverTime <= cues[0].start) {
+    } else {
       setActiveCue(cues[0]);
     }
   }, [hoverTime, cues]);

@@ -535,31 +535,34 @@
   flex-direction: column;
   align-items: center;
   pointer-events: none;
-  z-index: 35;
+  z-index: 50;
   transition: opacity 0.15s ease;
   animation: fadeIn 0.15s ease-out;
 }
 
 .seek-thumbnail-frame {
+  width: 160px;
+  height: 90px;
   border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8), 0 0 0 2px rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.9), 0 0 0 2px rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   overflow: hidden;
   background-color: #000;
+  background-repeat: no-repeat;
 }
 
 .seek-thumbnail-placeholder {
-  width: 120px;
-  height: 68px;
-  background: rgba(0, 0, 0, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  width: 160px;
+  height: 90px;
+  background: rgba(0, 0, 0, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: #eee;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.8);
 }
 
 .seek-time-badge {
