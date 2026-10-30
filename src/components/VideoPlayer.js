@@ -554,6 +554,18 @@ export default function VideoPlayer({
       const currentPercent = (current / duration) * 100;
       setProgress(currentPercent);
 
+      // Persist watch progress for this movie in localStorage
+      if (current > 3 && (current < duration - 10)) {
+        if (targetId) localStorage.setItem(`pos_${targetId}`, String(Math.floor(current)));
+        if (videoId) localStorage.setItem(`pos_${videoId}`, String(Math.floor(current)));
+        if (driveFileId) localStorage.setItem(`pos_${driveFileId}`, String(Math.floor(current)));
+      } else if (current >= duration - 10) {
+        // If movie is finished, reset saved position
+        if (targetId) localStorage.removeItem(`pos_${targetId}`);
+        if (videoId) localStorage.removeItem(`pos_${videoId}`);
+        if (driveFileId) localStorage.removeItem(`pos_${driveFileId}`);
+      }
+
       // Trigger pre-fetch when reaching 70% or less than 30s remaining
       if (nextVideoId && (currentPercent >= 70 || (duration - current) <= 30)) {
         prefetchNextVideo(nextVideoId);
@@ -588,9 +600,15 @@ export default function VideoPlayer({
   const handleLoadedMetadata = () => {
     if (!videoRef.current) return;
     let pos = initialTime;
-    if (!pos && driveFileId) {
-      const savedPos = localStorage.getItem(`pos_${driveFileId}`);
-      if (savedPos && !isNaN(savedPos)) pos = parseFloat(savedPos);
+    if (!pos) {
+      const candidates = [targetId, videoId, driveFileId].filter(Boolean);
+      for (const id of candidates) {
+        const savedPos = localStorage.getItem(`pos_${id}`);
+        if (savedPos && !isNaN(savedPos)) {
+          pos = parseFloat(savedPos);
+          break;
+        }
+      }
     }
 
     if (pos > 0 && pos < videoRef.current.duration - 5) {
