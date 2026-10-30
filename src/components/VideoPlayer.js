@@ -607,7 +607,7 @@ export default function VideoPlayer({
         </button>
       </div>
 
-      <video
+      <video\n        onContextMenu={(e) => e.preventDefault()}
         ref={videoRef}
         poster={poster}
         autoPlay
