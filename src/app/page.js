@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import ContentRow from '@/components/ContentRow';
 import '@/styles/Home.css';
+import HeroCarousel from '@/components/HeroCarousel';
 
 const HERO_SLIDES = [
   {
@@ -246,64 +247,8 @@ export default function Home() {
 
   return (
     <div className="home-page">
-      {/* Hero Section */}
-      {heroSlides.length > 0 && (
-        <section className="hero">
-          {heroSlides.map((slide, index) => (
-            <div 
-              key={`bg-${slide.id}`}
-              className={`hero-bg ${index === activeSlide ? 'active' : ''}`}
-              style={{ backgroundImage: `url('${slide.bgImage}')` }}
-            />
-          ))}
-          
-          <div className="hero-overlay"></div>
-          
-          <div className="hero-content-wrapper">
-            {heroSlides.map((slide, index) => (
-              <div 
-                key={`content-${slide.id}`} 
-                className={`hero-content ${index === activeSlide ? 'active' : ''}`}
-              >
-                <h1 className="hero-title" dangerouslySetInnerHTML={{ __html: slide.title }}></h1>
-                
-                <div className="hero-highlight-container">
-                  <span className="hero-highlight-badge">{slide.badge}</span>
-                  <span className="hero-highlight-sub">{slide.subBadge}</span>
-                </div>
-
-                <p className="hero-meta" dangerouslySetInnerHTML={{ __html: slide.meta }}></p>
-                
-                <p className="hero-description" dangerouslySetInnerHTML={{ __html: slide.description }}></p>
-                
-                <div className="hero-actions">
-                  <Link href={`/watch/${slide.slug || slide.videoId || 'f1'}`}>
-                    <button className="btn-watch-now">
-                      <span className="play-icon">▶</span> Watch Now
-                    </button>
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Mini Carousel */}
-          {heroSlides.length > 1 && (
-            <div className="hero-mini-carousel">
-              {heroSlides.map((slide, index) => (
-                <div 
-                  key={slide.id} 
-                  className={`mini-carousel-item ${index === activeSlide ? 'active' : ''}`}
-                  onClick={() => setActiveSlide(index)}
-                >
-                  <img src={slide.thumbImage} alt={`Thumbnail ${slide.id}`} />
-                </div>
-              ))}
-              <button className="mini-carousel-nav-btn glass" onClick={nextSlide}>›</button>
-            </div>
-          )}
-        </section>
-      )}
+      {/* Hero Carousel */}
+      <HeroCarousel />
 
       {/* Main Content Sections */}
       <div className="content-container">

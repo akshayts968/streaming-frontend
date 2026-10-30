@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import '@/styles/Admin.css';
+import FeaturedManager from '@/components/admin/FeaturedManager';
 
 export default function AdminPage() {
   const [videos, setVideos] = useState([]);
@@ -676,6 +677,9 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {/* Featured Movies Manager (Hero Carousel) */}
+      <FeaturedManager />
 
       {/* Live Telegram Video & Upload Monitor */}
       <div style={{
