@@ -39,7 +39,10 @@ export default function VideoPlayer({
   const [currentAudioTrack, setCurrentAudioTrack] = useState(-1);
   const [subtitleTracks, setSubtitleTracks] = useState([]);
   const [currentSubtitleTrack, setCurrentSubtitleTrack] = useState(-1);
-  const [showTracksMenu, setShowTracksMenu] = useState(false); // Audio / Subtitle modal
+  const [showTracksMenu, setShowTracksMenu] = useState(false);
+  const [showAudioMenu, setShowAudioMenu] = useState(false);
+  const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
+  const subFileInputRef = useRef(null);
 
   // Hover progress preview
   const [hoverPosition, setHoverPosition] = useState(null);
@@ -207,6 +210,37 @@ export default function VideoPlayer({
       }
     };
   }, [targetId, backendUrl]);
+
+  const handleUploadSubtitle = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      let text = event.target.result;
+      if (file.name.endsWith('.srt') || !text.startsWith('WEBVTT')) {
+        text = 'WEBVTT\n\n' + text
+          .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')
+          .replace(/\r\n|\r/g, '\n');
+      }
+      const blob = new Blob([text], { type: 'text/vtt' });
+      const vttUrl = URL.createObjectURL(blob);
+      const customSub = {
+        name: file.name.replace(/\.[^/.]+$/, ''),
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        lang: 'custom',
+        url: vttUrl
+      };
+      setSubtitleTracks(prev => {
+        const next = [...prev, customSub];
+        setTimeout(() => selectSubtitleTrack(next.length - 1), 60);
+        return next;
+      });
+      setShowSubtitleMenu(false);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   const selectAudioTrack = (index) => {
     if (hlsRef.current) {
@@ -388,6 +422,17 @@ export default function VideoPlayer({
             showAction(<Volume2 size={32} />, '100%');
           }
           break;
+        case 'c':
+        case 'C':
+          e.preventDefault();
+          e.stopPropagation();
+          if (subtitleTracks.length > 0) {
+            const nextIdx = currentSubtitleTrack === -1 ? 0 : -1;
+            selectSubtitleTrack(nextIdx);
+          } else {
+            showAction(<Subtitles size={32} />, 'No Subtitles Available');
+          }
+          break;
         default:
           break;
       }
@@ -498,7 +543,7 @@ export default function VideoPlayer({
     setShowControls(true);
     clearTimeout(controlsTimeoutRef.current);
     controlsTimeoutRef.current = setTimeout(() => {
-      if (isPlaying && !showSettings && !showTracksMenu) setShowControls(false);
+      if (isPlaying && !showSettings && !showTracksMenu && !showAudioMenu && !showSubtitleMenu && !showAudioMenu && !showSubtitleMenu) setShowControls(false);
     }, 3500);
   };
 
@@ -538,6 +583,8 @@ export default function VideoPlayer({
       onClick={() => {
         if (showSettings) setShowSettings(false);
         if (showTracksMenu) setShowTracksMenu(false);
+        if (showAudioMenu) setShowAudioMenu(false);
+        if (showSubtitleMenu) setShowSubtitleMenu(false);
       }}
       tabIndex={0}
       style={{ outline: 'none' }}
@@ -756,62 +803,113 @@ export default function VideoPlayer({
           </div>
 
           <div className="right-controls">
-            {/* Multi-Audio & Subtitles Track Selection */}
-            {true && (
-              <div className="settings-container">
-                <button 
-                  type="button" 
-                  onClick={(e) => { e.stopPropagation(); setShowTracksMenu(!showTracksMenu); setShowSettings(false); }}
-                  className="control-btn icon-btn" 
-                  title="Audio & Subtitles"
-                >
-                  <Languages size={20} />
-                </button>
+            {/* Subtitles & Captions Menu */}
+            <div className="settings-container">
+              <button 
+                type="button" 
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  setShowSubtitleMenu(!showSubtitleMenu); 
+                  setShowAudioMenu(false); 
+                  setShowSettings(false); 
+                }}
+                className={`control-btn icon-btn ${currentSubtitleTrack !== -1 ? 'active-track' : ''}`} 
+                title="Subtitles & Captions (c)"
+                style={currentSubtitleTrack !== -1 ? { color: '#e50914' } : {}}
+              >
+                <Subtitles size={20} />
+              </button>
 
-                {showTracksMenu && (
-                  <div className="settings-menu glass" onClick={(e) => e.stopPropagation()} style={{ minWidth: '180px' }}>
-                    {audioTracks.length > 0 && (
-                      <>
-                        <div className="settings-header">Audio Language</div>
-                        {audioTracks.map((track, i) => (
-                          <button
-                            type="button"
-                            key={`audio-${i}`}
-                            className={`settings-option ${currentAudioTrack === i ? 'active' : ''}`}
-                            onClick={() => selectAudioTrack(i)}
-                          >
-                            {track.name || track.lang || `Audio ${i + 1}`}
-                          </button>
-                        ))}
-                      </>
-                    )}
+              {showSubtitleMenu && (
+                <div className="settings-menu glass" onClick={(e) => e.stopPropagation()} style={{ minWidth: '200px' }}>
+                  <div className="settings-header">Subtitles / Captions</div>
+                  
+                  <button
+                    type="button"
+                    className={`settings-option ${currentSubtitleTrack === -1 ? 'active' : ''}`}
+                    onClick={() => { selectSubtitleTrack(-1); setShowSubtitleMenu(false); }}
+                  >
+                    <span>Off</span>
+                    {currentSubtitleTrack === -1 && <span style={{ marginLeft: 'auto', color: '#e50914' }}>✓</span>}
+                  </button>
 
-                    {subtitleTracks.length > 0 && (
-                      <>
-                        <div className="settings-header" style={{ marginTop: '0.5rem' }}>Subtitles</div>
-                        <button
-                          type="button"
-                          className={`settings-option ${currentSubtitleTrack === -1 ? 'active' : ''}`}
-                          onClick={() => selectSubtitleTrack(-1)}
-                        >
-                          Off
-                        </button>
-                        {subtitleTracks.map((sub, i) => (
-                          <button
-                            type="button"
-                            key={`sub-${i}`}
-                            className={`settings-option ${currentSubtitleTrack === i ? 'active' : ''}`}
-                            onClick={() => selectSubtitleTrack(i)}
-                          >
-                            {sub.name || sub.lang || `Subtitle ${i + 1}`}
-                          </button>
-                        ))}
-                      </>
-                    )}
+                  {subtitleTracks.map((sub, i) => (
+                    <button
+                      type="button"
+                      key={`sub-${i}`}
+                      className={`settings-option ${currentSubtitleTrack === i ? 'active' : ''}`}
+                      onClick={() => { selectSubtitleTrack(i); setShowSubtitleMenu(false); }}
+                    >
+                      <span>{sub.name || sub.title || sub.lang || `Subtitle ${i + 1}`}</span>
+                      {currentSubtitleTrack === i && <span style={{ marginLeft: 'auto', color: '#e50914' }}>✓</span>}
+                    </button>
+                  ))}
+
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '0.4rem', paddingTop: '0.4rem' }}>
+                    <button
+                      type="button"
+                      className="settings-option"
+                      onClick={() => subFileInputRef.current?.click()}
+                      style={{ fontSize: '0.8rem', color: '#aaa' }}
+                    >
+                      <span>📁 Load Custom Subtitle (.srt / .vtt)</span>
+                    </button>
+                    <input 
+                      type="file" 
+                      ref={subFileInputRef} 
+                      accept=".vtt,.srt" 
+                      onChange={handleUploadSubtitle} 
+                      style={{ display: 'none' }} 
+                    />
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
+
+            {/* Audio Language Selection Menu */}
+            <div className="settings-container">
+              <button 
+                type="button" 
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  setShowAudioMenu(!showAudioMenu); 
+                  setShowSubtitleMenu(false); 
+                  setShowSettings(false); 
+                }}
+                className="control-btn icon-btn" 
+                title="Audio Language"
+              >
+                <Languages size={20} />
+              </button>
+
+              {showAudioMenu && (
+                <div className="settings-menu glass" onClick={(e) => e.stopPropagation()} style={{ minWidth: '180px' }}>
+                  <div className="settings-header">Audio Language</div>
+                  {audioTracks.length > 0 ? (
+                    audioTracks.map((track, i) => (
+                      <button
+                        type="button"
+                        key={`audio-${i}`}
+                        className={`settings-option ${currentAudioTrack === i ? 'active' : ''}`}
+                        onClick={() => { selectAudioTrack(i); setShowAudioMenu(false); }}
+                      >
+                        <span>{track.name || track.lang || `Audio ${i + 1}`}</span>
+                        {currentAudioTrack === i && <span style={{ marginLeft: 'auto', color: '#e50914' }}>✓</span>}
+                      </button>
+                    ))
+                  ) : (
+                    <button
+                      type="button"
+                      className="settings-option active"
+                      onClick={() => setShowAudioMenu(false)}
+                    >
+                      <span>Original Audio (Stereo)</span>
+                      <span style={{ marginLeft: 'auto', color: '#e50914' }}>✓</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Rotate Video Button */}
             <button 
