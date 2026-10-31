@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import ContentRow from '@/components/ContentRow';
+import { formatMediaUrl } from '@/utils/media';
 import '@/styles/Browse.css';
 
 export default function BrowsePage() {
@@ -86,7 +87,7 @@ export default function BrowsePage() {
                 onClick={() => window.location.href = `/watch/${video.slug || video._id}`}
               >
                 <div className="browse-thumb-wrapper">
-                  <img src={video.thumbnailUrl || '/no-thumbnail.jpg'} alt={video.title} className="browse-thumb" />
+                  <img src={formatMediaUrl(video.thumbnailUrl)} onError={(e) => { e.currentTarget.src = '/no-thumbnail.jpg'; }} alt={video.title} className="browse-thumb" />
                   <div className="browse-overlay glass">
                     <span className="play-icon">▶</span>
                   </div>

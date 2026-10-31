@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { formatMediaUrl } from '@/utils/media';
 import '@/styles/Browse.css'; // Reusing browse styles for consistency
 
 export default function WatchlistPage() {
@@ -47,7 +48,7 @@ export default function WatchlistPage() {
           {list.map(item => (
             <div key={item._id} className="browse-video-card" onClick={() => window.location.href = `/watch/${item.video._id}`}>
               <div className="browse-thumb-wrapper">
-                <img src={item.video.thumbnailUrl || '/no-thumbnail.jpg'} alt={item.video.title} className="browse-thumb" />
+                <img src={formatMediaUrl(item.video.thumbnailUrl)} onError={(e) => { e.currentTarget.src = '/no-thumbnail.jpg'; }} alt={item.video.title} className="browse-thumb" />
                 <div className="browse-overlay glass">
                   <span className="play-icon">▶</span>
                 </div>

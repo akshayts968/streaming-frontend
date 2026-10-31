@@ -41,6 +41,7 @@ export default function ContentRow({ title, videos = [] }) {
                     src={formatMediaUrl(video.thumbnailUrl)} 
                     alt={video.title} 
                     className="thumbnail"
+                    onError={(e) => { e.currentTarget.src = '/no-thumbnail.jpg'; }}
                   />
                   <div className="video-overlay glass">
                     <div className="play-badge">▶</div>
