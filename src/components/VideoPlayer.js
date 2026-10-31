@@ -76,7 +76,8 @@ export default function VideoPlayer({
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showSettings, setShowSettings] = useState(false);
   const [actionIndicator, setActionIndicator] = useState(null);
-  const [quality, setQuality] = useState('360');
+  const [quality, setQuality] = useState('auto');
+  const [availableQualities, setAvailableQualities] = useState([]);
   const [rotationAngle, setRotationAngle] = useState(0);
 
   // Multi-Audio & Subtitle Tracks State
@@ -213,9 +214,35 @@ export default function VideoPlayer({
             }
           });
 
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
             setIsLoading(false);
+            if (data && data.levels && data.levels.length > 0) {
+              const qs = data.levels.map((lvl, index) => {
+                const h = lvl.height || (lvl.attrs && lvl.attrs.RESOLUTION ? lvl.attrs.RESOLUTION.height : 0);
+                let label = `${h}p`;
+                if (h >= 1440) label = '2K';
+                else if (h === 1080) label = '1080p (Full HD)';
+                else if (h === 720) label = '720p (HD)';
+                else if (h === 480) label = '480p (SD)';
+                else if (h === 360) label = '360p (Low)';
+                return {
+                  id: String(h || index),
+                  height: h,
+                  label,
+                  levelIndex: index
+                };
+              });
+              // Sort descending by height
+              qs.sort((a, b) => b.height - a.height);
+              setAvailableQualities(qs);
+            }
             attemptAutoplay();
+          });
+
+          hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+            if (hls.autoLevelEnabled) {
+              // Quality stays 'auto'
+            }
           });
 
           hls.on(Hls.Events.ERROR, (event, data) => {
@@ -237,6 +264,7 @@ export default function VideoPlayer({
           });
         } else {
           // Fallback to standard range stream
+          setAvailableQualities([]);
           videoEl.src = fallbackStreamUrl;
           videoEl.load();
           setIsLoading(false);
@@ -244,6 +272,7 @@ export default function VideoPlayer({
         }
       })
       .catch(() => {
+        setAvailableQualities([]);
         videoEl.src = fallbackStreamUrl;
         videoEl.load();
         setIsLoading(false);
@@ -683,16 +712,22 @@ export default function VideoPlayer({
   const changeQuality = (q) => {
     setQuality(q);
     setShowSettings(false);
-    if (hlsRef.current && hlsRef.current.levels) {
+    if (hlsRef.current && hlsRef.current.levels && hlsRef.current.levels.length > 0) {
       if (q === 'auto') {
         hlsRef.current.currentLevel = -1;
+        showAction(null, 'Quality: Auto');
       } else {
         const targetH = parseInt(q, 10);
         const idx = hlsRef.current.levels.findIndex(lvl => lvl.height === targetH);
-        if (idx !== -1) hlsRef.current.currentLevel = idx;
+        if (idx !== -1) {
+          hlsRef.current.currentLevel = idx;
+        }
+        const label = targetH >= 1440 ? '2K' : `${targetH}p`;
+        showAction(null, `Quality: ${label}`);
       }
+    } else {
+      showAction(null, 'Quality: Source Stream');
     }
-    showAction(null, q === '360' ? '360p (Low)' : `${q}p`);
   };
 
   return (
@@ -1089,8 +1124,8 @@ export default function VideoPlayer({
               >
                 <div style={{ position: 'relative' }}>
                   <Settings size={20} className={showSettings ? 'spin' : ''} />
-                  {(quality === '1080' || quality === '720') && (
-                    <span className="hd-tag">HD</span>
+                  {(quality === '1440' || quality === '1080' || quality === '720') && (
+                    <span className="hd-tag">{quality === '1440' ? '2K' : 'HD'}</span>
                   )}
                 </div>
               </button>
@@ -1101,7 +1136,7 @@ export default function VideoPlayer({
                   <div className="settings-options-grid">
                     {[0.5, 0.75, 1, 1.25, 1.5, 2].map(rate => (
                       <button 
-                        type="button"
+                        type="button" 
                         key={`speed-${rate}`} 
                         className={`settings-option ${playbackRate === rate ? 'active' : ''}`}
                         onClick={() => changePlaybackRate(rate)}
@@ -1113,16 +1148,51 @@ export default function VideoPlayer({
 
                   <div className="settings-header" style={{marginTop: '0.5rem'}}>Quality</div>
                   <div className="settings-options-grid">
-                    {['360', '480', '720', '1080'].map(q => (
-                      <button 
-                        type="button"
-                        key={`quality-${q}`} 
-                        className={`settings-option ${quality === q ? 'active' : ''}`}
-                        onClick={() => changeQuality(q)}
-                      >
-                        {q === '360' ? '360p (Low)' : `${q}p`}
-                      </button>
-                    ))}
+                    {availableQualities.length > 0 ? (
+                      <>
+                        <button 
+                          type="button"
+                          key="quality-auto"
+                          className={`settings-option ${quality === 'auto' ? 'active' : ''}`}
+                          onClick={() => changeQuality('auto')}
+                        >
+                          Auto
+                        </button>
+                        {availableQualities.map(q => (
+                          <button 
+                            type="button"
+                            key={`quality-${q.id}`} 
+                            className={`settings-option ${quality === q.id ? 'active' : ''}`}
+                            onClick={() => changeQuality(q.id)}
+                          >
+                            {q.label}
+                          </button>
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="settings-option active"
+                          disabled
+                          title="Playing source resolution"
+                        >
+                          Source (Direct)
+                        </button>
+                        {['1440', '1080', '720', '480', '360'].map(q => (
+                          <button 
+                            type="button"
+                            key={`quality-placeholder-${q}`} 
+                            className="settings-option"
+                            style={{ opacity: 0.45, cursor: 'not-allowed' }}
+                            title="Transcoding in background"
+                            onClick={() => showAction(null, 'Encoding multi-bitrate in progress')}
+                          >
+                            {q === '1440' ? '2K' : `${q}p`}
+                          </button>
+                        ))}
+                      </>
+                    )}
                   </div>
                 </div>
               )}
