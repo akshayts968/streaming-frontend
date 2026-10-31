@@ -181,11 +181,21 @@ export default function VideoPlayer({
     fetch(hlsUrl, { method: 'HEAD' })
       .then((res) => {
         if (res.ok && res.status === 200 && Hls.isSupported()) {
-          // Initialize HLS.js
+          // Initialize HLS.js with aggressive pre-buffering to eliminate stutter
           const hls = new Hls({
             enableWorker: true,
-            lowLatencyMode: true,
-            backBufferLength: 90,
+            lowLatencyMode: false,          // Prefer deep buffer stability over low latency
+            maxBufferLength: 60,            // Buffer up to 60 seconds ahead
+            maxMaxBufferLength: 180,        // Max forward buffer cap of 180 seconds
+            maxBufferSize: 80 * 1024 * 1024,// 80MB buffer memory limit
+            backBufferLength: 90,           // Keep 90s behind for instant seek back
+            startLevel: -1,                 // Auto level (starts on optimal bandwidth)
+            autoStartLoad: true,
+            manifestLoadingTimeOut: 15000,
+            levelLoadingTimeOut: 15000,
+            fragLoadingTimeOut: 25000,
+            fragLoadingMaxRetry: 5,
+            fragLoadingRetryDelay: 500,
             xhrSetup: (xhr) => {
               const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
               if (token) {
@@ -824,7 +834,7 @@ export default function VideoPlayer({
         onWaiting={() => setIsLoading(true)}
         onPlaying={() => { setIsLoading(false); setIsPlaying(true); }}
         onPause={() => setIsPlaying(false)}
-        preload="metadata"
+        preload="auto"
         controlsList="nodownload"
         crossOrigin="anonymous"
       >
