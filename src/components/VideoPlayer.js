@@ -76,7 +76,7 @@ export default function VideoPlayer({
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showSettings, setShowSettings] = useState(false);
   const [actionIndicator, setActionIndicator] = useState(null);
-  const [quality, setQuality] = useState('auto');
+  const [quality, setQuality] = useState('360');
   const [availableQualities, setAvailableQualities] = useState([]);
   const [rotationAngle, setRotationAngle] = useState(0);
 
@@ -245,6 +245,13 @@ export default function VideoPlayer({
               // Sort descending by height
               qs.sort((a, b) => b.height - a.height);
               setAvailableQualities(qs);
+
+              // Default to 360p for instant, smooth, lightweight playback
+              const target360 = qs.find(q => q.height === 360) || qs[qs.length - 1];
+              if (target360 && target360.levelIndex !== undefined) {
+                hls.currentLevel = target360.levelIndex;
+                setQuality(target360.id);
+              }
             }
             attemptAutoplay();
           });
